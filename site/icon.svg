@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">CCStudy icon</title>
+  <desc id="desc">A dossier-inspired C mark with a prompt arrow for the CCStudy course site.</desc>
+  <defs>
+    <linearGradient id="bg" x1="12" y1="10" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C4623E"/>
+      <stop offset="1" stop-color="#7B341D"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)"/>
+  <path d="M38 18C30.27 18 24 24.27 24 32s6.27 14 14 14c3.03 0 5.84-.96 8.14-2.6l3.54 4.95A19.85 19.85 0 0 1 38 52c-11.05 0-20-8.95-20-20s8.95-20 20-20c4.44 0 8.54 1.45 11.86 3.9l-3.57 4.93A13.9 13.9 0 0 0 38 18Z" fill="#FFF7F0"/>
+  <path d="m34.5 27 8 5-8 5v-3.75H27v-2.5h7.5Z" fill="#1F1612"/>
+</svg>

@@ -64,8 +64,15 @@ bash build-all.sh
 
 构建时会把完整 `source/claude-code-source` 同步到 `site/source/claude-code-source`，这样页面里的源码按钮可以直接打开站内 code viewer，在 GitHub Pages 上也能工作。
 
+## 课程地址
+
+- English: https://bagaking.github.io/ccstudy/
+- 中文: https://bagaking.github.io/ccstudy/zh/
+
+本地入口仍然是 `site/index.html` 与 `site/zh/index.html`。
+
 ## 说明
 
 - `source/claude-code-source` 保留完整源码树。
 - 使用入口是这个仓库根 README；
-- 课程入口是 `site/index.html` 与 `site/zh/index.html`。
+- 课程公开地址见上面的“课程地址”。
