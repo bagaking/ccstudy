@@ -1,0 +1,193 @@
+<section class="module" id="module-7">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">07</span>
+      <h1 class="module-title">Context Engineering</h1>
+      <p class="module-subtitle">Claude Code does not rely on one clever prompt. It assembles a runtime context stack: system prompt sections, tools, repo rules, memory files, and compaction boundaries.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Prompting is only the visible tip</h2>
+      <p class="animate-in">The model is never handed a naked user message. By the time one turn begins, Claude Code has already layered in a <span class="term" data-definition="System prompt means the hidden instruction block that defines the agent’s behavior, constraints, and available capabilities.">system prompt</span>, tool schemas, project instructions, memory files, and the surviving conversation history. That assembly process is what people now call <span class="term" data-definition="Context engineering is the design work of deciding what information the model sees, in what order, and with what priority.">context engineering</span>.</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">📘</div>
+          <h4 class="pattern-title">System prompt</h4>
+          <p class="pattern-desc">Standing instructions, tool affordances, safety expectations, and runtime role framing.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🗂️</div>
+          <h4 class="pattern-title">Repo rules</h4>
+          <p class="pattern-desc">`CLAUDE.md`, `.claude/CLAUDE.md`, and rules files carry project-local instructions that shape behavior per workspace.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🧠</div>
+          <h4 class="pattern-title">Memory + history</h4>
+          <p class="pattern-desc">User memory, session memory, and compacted transcripts decide what the model “still knows” on the next round trip.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">Most “the prompt is bad” complaints are actually context-shaping bugs</strong>
+          <p>If the agent ignores a repo rule or forgets a convention, the failure often sits upstream: wrong files were loaded, loaded in the wrong order, or compacted away too aggressively.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">The handoff where system context gets assembled</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts` (lines 284-300)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">headlessProfilerCheckpoint('before_getSystemPrompt')</span>
+<span class="code-line">const customPrompt =</span>
+<span class="code-line">  typeof customSystemPrompt === 'string' ? customSystemPrompt : undefined</span>
+<span class="code-line">const {</span>
+<span class="code-line">  defaultSystemPrompt,</span>
+<span class="code-line">  userContext: baseUserContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">} = await fetchSystemPromptParts({</span>
+<span class="code-line">  tools,</span>
+<span class="code-line">  mainLoopModel: initialMainLoopModel,</span>
+<span class="code-line">  additionalWorkingDirectories: Array.from(</span>
+<span class="code-line">    initialAppState.toolPermissionContext.additionalWorkingDirectories.keys(),</span>
+<span class="code-line">  ),</span>
+<span class="code-line">  mcpClients,</span>
+<span class="code-line">  customSystemPrompt: customPrompt,</span>
+<span class="code-line">})</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">The system prompt is fetched as a structured assembly step, not hardcoded inline at the call site.</p>
+            <p class="tl">Tool availability, model choice, extra working directories, MCP clients, and custom prompt overrides all influence what gets built.</p>
+            <p class="tl">By the time the model sees the request, the “prompt” is already the output of a small build pipeline.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">CLAUDE.md is a layered instruction system</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/claudemd.ts` (lines 1-16)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">/**</span>
+<span class="code-line"> * Files are loaded in the following order:</span>
+<span class="code-line"> *</span>
+<span class="code-line"> * 1. Managed memory (eg. /etc/claude-code/CLAUDE.md) - Global instructions for all users</span>
+<span class="code-line"> * 2. User memory (~/.claude/CLAUDE.md) - Private global instructions for all projects</span>
+<span class="code-line"> * 3. Project memory (CLAUDE.md, .claude/CLAUDE.md, and .claude/rules/*.md in project roots) - Instructions checked into the codebase</span>
+<span class="code-line"> * 4. Local memory (CLAUDE.local.md in project roots) - Private project-specific instructions</span>
+<span class="code-line"> *</span>
+<span class="code-line"> * Files are loaded in reverse order of priority, i.e. the latest files are highest priority</span>
+<span class="code-line"> * with the model paying more attention to them.</span>
+<span class="code-line"> */</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Repo instructions are not one file. They are a stack with explicit priority levels.</p>
+            <p class="tl">Managed and user memory define broader defaults; project and local files narrow behavior to the current workspace.</p>
+            <p class="tl">This is why “why did Claude behave differently here?” often reduces to “which CLAUDE.md layer won?”</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Global policy first</strong>
+            <p>Managed and user-level files establish the broadest defaults for all work.</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Project rules next</strong>
+            <p>`CLAUDE.md` and `.claude/rules/*.md` bind the agent to repo-specific conventions.</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Nearest context wins</strong>
+            <p>Files closer to the active working directory are loaded later and therefore receive more attention.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Memory file discovery is cached on purpose</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/claudemd.ts` (lines 790-804, 886-900)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const getMemoryFiles = memoize(</span>
+<span class="code-line">  async (forceIncludeExternal: boolean = false): Promise&lt;MemoryFileInfo[]&gt; =&gt; {</span>
+<span class="code-line">    const result: MemoryFileInfo[] = []</span>
+<span class="code-line">    const processedPaths = new Set&lt;string&gt;()</span>
+<span class="code-line">    const config = getCurrentProjectConfig()</span>
+<span class="code-line">    const includeExternal =</span>
+<span class="code-line">      forceIncludeExternal ||</span>
+<span class="code-line">      config.hasClaudeMdExternalIncludesApproved ||</span>
+<span class="code-line">      false</span>
+<span class="code-line"></span>
+<span class="code-line">    // Process Managed file first (always loaded - policy settings)</span>
+<span class="code-line">    const managedClaudeMd = getMemoryPath('Managed')</span>
+<span class="code-line"></span>
+<span class="code-line">    if (isSettingSourceEnabled('projectSettings') &amp;&amp; !skipProject) {</span>
+<span class="code-line">      const projectPath = join(dir, 'CLAUDE.md')</span>
+<span class="code-line">      result.push(...(await processMemoryFile(projectPath, 'Project', processedPaths, includeExternal)))</span>
+<span class="code-line">      const dotClaudePath = join(dir, '.claude', 'CLAUDE.md')</span>
+<span class="code-line">      result.push(...(await processMemoryFile(dotClaudePath, 'Project', processedPaths, includeExternal)))</span>
+<span class="code-line">    }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">The runtime memoizes memory-file discovery because scanning rule files every turn would be wasteful.</p>
+            <p class="tl">It still preserves hierarchy: managed files, project `CLAUDE.md`, and `.claude/CLAUDE.md` all get discovered deliberately.</p>
+            <p class="tl">That means context engineering is both semantic and operational: the right files must be found, and found efficiently.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module7">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Exactly. If project conventions are being ignored, the first suspect is the context-loading path, not the wording of your user prompt." data-explanation-wrong="This symptom usually points upstream: repo instructions were not loaded, loaded at the wrong priority, or compacted away.">
+          <h3 class="quiz-question">The agent suddenly stops following a repo naming convention documented in `CLAUDE.md`. What is the best first diagnosis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The model became worse at TypeScript overnight</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The context stack or CLAUDE.md loading path is wrong</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The code viewer theme needs a different font</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Files nearer the working directory are loaded later and therefore get higher practical priority." data-explanation-wrong="The loader is hierarchical. Local and near-directory instruction files are designed to override broader defaults.">
+          <h3 class="quiz-question">In a monorepo, which instruction layer should win for a nested package?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The oldest global managed file always wins</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>User memory must override every project rule</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The nearer project-specific rule file should have the higher effective priority</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Right. Context engineering includes operational concerns like caching and memoization, not just semantic concerns like prompt wording." data-explanation-wrong="The memoization around memory-file discovery exists because context shaping has to stay fast enough for real usage, not just correct on paper.">
+          <h3 class="quiz-question">Why is `getMemoryFiles` memoized?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because repeated file discovery every turn would add needless overhead</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because memory files never change during a session</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because memoization is required by TypeScript</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module7')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module7')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

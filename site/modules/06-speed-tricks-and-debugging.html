@@ -1,0 +1,108 @@
+<section class="module" id="module-6">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">06</span>
+      <h1 class="module-title">Speed Tricks and Debugging</h1>
+      <p class="module-subtitle">Performance comes from orchestration: parallelize what is independent, defer what is optional, and preserve evidence for diagnosis.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Parallel Startup Is Intentional</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (~1919-1932)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {</span>
+<span class="code-line">  initBuiltinPlugins();</span>
+<span class="code-line">  initBundledSkills();</span>
+<span class="code-line">}</span>
+<span class="code-line">const setupPromise = setup(preSetupCwd, permissionMode, ...);</span>
+<span class="code-line">const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);</span>
+<span class="code-line">const agentDefsPromise = worktreeEnabled ? null : getAgentDefinitionsWithOverrides(preSetupCwd);</span>
+<span class="code-line">commandsPromise?.catch(() =&gt; {});</span>
+<span class="code-line">agentDefsPromise?.catch(() =&gt; {});</span>
+<span class="code-line">await setupPromise;</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Tiny in-memory setup is done first to avoid stale command snapshots.</p>
+          <p class="tl">Then independent startup tasks are fired in parallel.</p>
+          <p class="tl">This cuts wall-clock startup latency without changing behavior semantics.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Startup and Context Safeguards</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)"><div class="pattern-icon" style="background: var(--color-actor-1)">⏱️</div><h4 class="pattern-title">Startup Profiler</h4><p class="pattern-desc">Named phases (`import_time`, `init_time`, `settings_time`, `total_time`) allow targeted regressions diagnosis.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)"><div class="pattern-icon" style="background: var(--color-actor-2)">🧠</div><h4 class="pattern-title">Auto-Compact</h4><p class="pattern-desc">Context thresholding and failure circuit-breakers prevent runaway long-turn degradation.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)"><div class="pattern-icon" style="background: var(--color-actor-3)">🧾</div><h4 class="pattern-title">File Checkpointing</h4><p class="pattern-desc">Edit snapshots are retained for rollback and forensic debugging.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">File Checkpointing Data Model</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/fileHistory.ts` (lines 39-43, 54, 63-70)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export type FileHistorySnapshot = {</span>
+<span class="code-line">  messageId: UUID</span>
+<span class="code-line">  trackedFileBackups: Record&lt;string, FileHistoryBackup&gt;</span>
+<span class="code-line">  timestamp: Date</span>
+<span class="code-line">}</span>
+<span class="code-line">const MAX_SNAPSHOTS = 100</span>
+<span class="code-line">export function fileHistoryEnabled(): boolean {</span>
+<span class="code-line">  return (getGlobalConfig().fileCheckpointingEnabled !== false &amp;&amp;</span>
+<span class="code-line">    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING))</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Snapshots are message-scoped and timestamped for traceability.</p>
+          <p class="tl">History depth is bounded (`MAX_SNAPSHOTS = 100`).</p>
+          <p class="tl">Checkpointing is configurable and can be disabled for special environments.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Debugging Playbook by Symptom</h2>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Startup feels slow</strong><p>Check startup phase metrics before touching business logic.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Turn latency spikes</strong><p>Inspect tool orchestration path: concurrency-safe partitioning vs serial waits.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Context forgetfulness</strong><p>Check auto-compact trigger thresholds and summary boundaries.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Bad edit fallout</strong><p>Use file-history snapshots to rewind by message scope.</p></div></div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content"><strong class="callout-title">Observability is product capability</strong><p>If a system records checkpoints, snapshots, and structured failures, debugging becomes search and classification, not guesswork.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module6">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Correct. Independent tasks should overlap when no data dependency exists." data-explanation-wrong="Parallel startup is explicit in main.tsx orchestration.">
+          <h3 class="quiz-question">What is the primary optimization pattern in startup orchestration?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Parallelize independent tasks and avoid unnecessary serialization</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Defer all initialization until first tool call</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Remove all startup checks for speed</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Exactly. Startup slowness maps first to entrypoint and main bootstrap path." data-explanation-wrong="Diagnose at startup routing/bootstrap layer before random downstream edits.">
+          <h3 class="quiz-question">Startup regressed after refactor. Best first file pair to inspect?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme palette + tooltip styles</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only QueryEngine loop internals</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/entrypoints/cli.tsx` and `source/claude-code-source/src/main.tsx`</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Yes. Good debugging starts with ownership mapping, not random file hopping." data-explanation-wrong="Map symptom to ownership boundary before implementing fixes.">
+          <h3 class="quiz-question">Core debugging skill this course trains?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Memorize every import path</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Map symptom to owning layer, then inspect boundary evidence</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always rewrite modules from scratch</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

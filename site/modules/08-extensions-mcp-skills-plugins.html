@@ -1,0 +1,165 @@
+<section class="module" id="module-8">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">08</span>
+      <h1 class="module-title">Extensions: MCP, Skills, Plugins</h1>
+      <p class="module-subtitle">Claude Code does not grow through one extension surface. It has three: protocol-level connectors, prompt-shaped skills, and installable plugins with lifecycle management.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Three extension surfaces, three different jobs</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🌐</div>
+          <h4 class="pattern-title">MCP</h4>
+          <p class="pattern-desc">Use this when you need the agent to talk to an external capability through a protocol: browser, database, remote system, IDE bridge.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧠</div>
+          <h4 class="pattern-title">Skills</h4>
+          <p class="pattern-desc">Use this when you want a reusable workflow or instruction bundle that shapes how the agent approaches a class of tasks.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📦</div>
+          <h4 class="pattern-title">Plugins</h4>
+          <p class="pattern-desc">Use this when you want packaged distribution, install/update/uninstall flows, marketplace surfacing, and explicit lifecycle management.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">These are not interchangeable abstractions</strong>
+          <p>A workflow prompt, a remote protocol connector, and an installable package solve different problems. Most bad extension designs start by choosing the wrong surface.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Bundled skills and plugins are registered before command loading</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (lines 1919-1928)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// Register bundled skills/plugins before kicking getCommands() — they're</span>
+<span class="code-line">// pure in-memory array pushes (&lt;1ms, zero I/O) that getBundledSkills()</span>
+<span class="code-line">// reads synchronously. Previously ran inside setup() after ~20ms of</span>
+<span class="code-line">// await points, so the parallel getCommands() memoized an empty list.</span>
+<span class="code-line">if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {</span>
+<span class="code-line">  initBuiltinPlugins();</span>
+<span class="code-line">  initBundledSkills();</span>
+<span class="code-line">}</span>
+<span class="code-line">const setupPromise = setup(preSetupCwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, sessionId ? validateUuid(sessionId) : undefined, worktreePRNumber, messagingSocketPath);</span>
+<span class="code-line">const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Extensions are part of startup topology, not a late afterthought.</p>
+            <p class="tl">Bundled skills and built-in plugins are registered before command loading so the command layer sees the right inventory immediately.</p>
+            <p class="tl">In other words: extension surfaces are first-class citizens in the boot sequence.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Skills are aggregated from multiple sources</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/commands.ts` (lines 359-385)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const [skillDirCommands, pluginSkills] = await Promise.all([</span>
+<span class="code-line">  getSkillDirCommands(cwd).catch(err =&gt; {</span>
+<span class="code-line">    logError(toError(err))</span>
+<span class="code-line">    logForDebugging('Skill directory commands failed to load, continuing without them')</span>
+<span class="code-line">    return []</span>
+<span class="code-line">  }),</span>
+<span class="code-line">  getPluginSkills().catch(err =&gt; {</span>
+<span class="code-line">    logError(toError(err))</span>
+<span class="code-line">    logForDebugging('Plugin skills failed to load, continuing without them')</span>
+<span class="code-line">    return []</span>
+<span class="code-line">  }),</span>
+<span class="code-line">])</span>
+<span class="code-line">const bundledSkills = getBundledSkills()</span>
+<span class="code-line">const builtinPluginSkills = getBuiltinPluginSkillCommands()</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">“Skills” do not come from one folder. The runtime merges skill-directory commands, plugin-provided skills, bundled skills, and built-in plugin skills.</p>
+            <p class="tl">It also treats failure defensively: one broken skill source should not take down the entire command surface.</p>
+            <p class="tl">This is extension-system design in practice: layered discovery plus graceful degradation.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Plugins are a full product surface, not a hidden hook</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (lines 4148-4172)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const pluginCmd = program.command('plugin').alias('plugins').description('Manage Claude Code plugins').configureHelp(createSortedHelpConfig());</span>
+<span class="code-line">pluginCmd.command('validate &lt;path&gt;').description('Validate a plugin or marketplace manifest')</span>
+<span class="code-line">pluginCmd.command('list').description('List installed plugins').option('--json', 'Output as JSON')</span>
+<span class="code-line">const marketplaceCmd = pluginCmd.command('marketplace').description('Manage Claude Code marketplaces').configureHelp(createSortedHelpConfig());</span>
+<span class="code-line">marketplaceCmd.command('add &lt;source&gt;').description('Add a marketplace from a URL, path, or GitHub repo')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Plugins are not just loadable code blobs. They come with explicit CLI management, validation, listing, marketplace handling, and install/update flows.</p>
+            <p class="tl">That means the extension surface is treated like a product with lifecycle rules, not just a hacky escape hatch.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">MCP</code>
+          <span class="badge-desc">Protocol-based capability hookup for external systems</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Skills</code>
+          <span class="badge-desc">Reusable task-shaping instructions and workflows</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Plugins</code>
+          <span class="badge-desc">Packaged, managed extension units with installation lifecycle</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module8">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Correct. If the job is connecting Claude Code to a remote capability through a protocol surface, MCP is the right first category." data-explanation-wrong="A protocol connector for remote tools belongs to MCP first, not to skills or plugin packaging by default.">
+          <h3 class="quiz-question">You want Claude Code to query a remote internal service through a structured protocol. What extension surface fits best?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Skill only</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme token</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Exactly. Skills are the better fit for repeatable workflows or instruction bundles that shape how the agent approaches work." data-explanation-wrong="If you are packaging a reusable workflow or prompt-driven operating procedure, the extension surface is closer to Skills than MCP or plugin lifecycle.">
+          <h3 class="quiz-question">You want a reusable “review this PR in our house style” workflow. What fits best?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP server first</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Skill</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Context compaction policy</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Packaging, marketplace visibility, install/update/uninstall, and lifecycle management all point toward a plugin-shaped integration." data-explanation-wrong="If the requirement includes distribution and lifecycle management, plugin is the stronger abstraction.">
+          <h3 class="quiz-question">You want to ship an installable extension with validation and marketplace support. What should you reach for?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only a local skill file</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only an MCP endpoint</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Plugin</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module8')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module8')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

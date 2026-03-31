@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCStudy - Cloud Code 内部拆解</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../styles.css">
+
+  <style>
+    :root {
+      --nav-height: 64px;
+      --color-accent:       #A54A2A;
+      --color-accent-hover: #8E3F23;
+      --color-accent-light: #F8E7DF;
+      --color-accent-muted: #CC7D5B;
+    }
+  </style>
+
+  <script src="../main.js" defer></script>
+</head>
+<body data-mode="story">
+  <button class="rail-scrim" id="rail-scrim" type="button" aria-label="关闭目录"></button>
+
+  <nav class="nav" id="nav">
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="nav-inner">
+      <a class="brand-pill" href="#hero-dossier">
+        <span class="brand-dot"></span>
+        <span class="brand-label">CCStudy 档案</span>
+      </a>
+
+      <div class="nav-dots" id="nav-dots" role="tablist" aria-label="模块导航"></div>
+
+      <div class="nav-actions" aria-label="阅读控制">
+        <div class="mode-switch" role="group" aria-label="阅读模式">
+          <button class="mode-btn active" data-mode="story" type="button">叙事</button>
+          <button class="mode-btn" data-mode="audit" type="button">审计</button>
+        </div>
+        <a class="repo-link" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">GitHub 仓库</a>
+        <button class="contents-btn" id="contents-btn" type="button" aria-controls="chapter-rail" aria-expanded="false">目录</button>
+        <div class="lang-switches" aria-label="语言切换">
+          <a class="lang-switch" href="../index.html">EN</a>
+          <a class="lang-switch active" href="./index.html" aria-current="page">中文</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <aside class="chapter-rail" id="chapter-rail" aria-label="模块目录">
+    <div class="chapter-rail-head">
+      <strong>审计目录</strong>
+      <button class="contents-btn close" id="contents-close" type="button">关闭</button>
+    </div>
+    <ol class="chapter-list" id="chapter-list"></ol>
+  </aside>
+
+  <main id="main">
+    <section class="hero-dossier" id="hero-dossier">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="hero-kicker">反向还原产品笔记</p>
+          <h1 class="hero-title">Cloud Code 内部拆解</h1>
+          <p class="hero-subtitle">一份可审计的技术课程：从启动链路、角色边界、工具编排到权限模型，完整理解终端编码代理如何运作。</p>
+          <div class="hero-tags">
+            <span class="hero-tag">静态站点</span>
+            <span class="hero-tag">中英双语</span>
+            <span class="hero-tag">源码可追踪</span>
+          </div>
+          <div class="hero-ctas">
+            <a class="hero-cta primary" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">打开仓库</a>
+            <button class="hero-cta" id="hero-open-viewer" type="button" data-open-file="source/claude-code-source/src/entrypoints/cli.tsx">查看源码</button>
+          </div>
+        </div>
+        <div class="hero-metrics" id="hero-metrics">
+          <article class="metric-card">
+            <span class="metric-label">模块数</span>
+            <strong class="metric-value" id="metric-modules">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">测验数</span>
+            <strong class="metric-value" id="metric-quizzes">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">代码块</span>
+            <strong class="metric-value" id="metric-snippets">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">术语注释</span>
+            <strong class="metric-value" id="metric-terms">-</strong>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="code-viewer-shell" id="code-viewer-shell" aria-hidden="true">
+      <div class="code-viewer-backdrop" id="code-viewer-backdrop"></div>
+      <div class="code-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="code-viewer-path">
+        <div class="code-viewer-head">
+          <div>
+            <p class="code-viewer-kicker">源码查看器</p>
+            <h2 class="code-viewer-path" id="code-viewer-path">-</h2>
+          </div>
+          <div class="code-viewer-actions">
+            <a class="code-viewer-link" id="code-viewer-github" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">在 GitHub 打开</a>
+            <button class="code-viewer-close" id="code-viewer-close" type="button" aria-label="关闭源码查看器">关闭</button>
+          </div>
+        </div>
+        <div class="code-viewer-status" id="code-viewer-status">点击页面中的文件引用即可加载源码。</div>
+        <div class="code-viewer-body">
+          <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+        </div>
+      </div>
+    </section>
+<section class="module" id="module-1">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">从提示到行动</h1>
+      <p class="module-subtitle">启动链路本身就是性能架构：轻请求即时返回，重系统按需唤醒，不做无效初始化。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">你按下回车后的第一毫秒</h2>
+      <p class="animate-in">执行 <span class="term" data-definition="CLI 是命令行界面：你通过在终端里输入命令来控制程序。">`claude`</span> 后，进程先做分流判定，不做全量加载。固定顺序是：读 `process.argv`，判定请求级别，再决定是否进入重型启动链路。</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>读参数</strong>
+            <p>先确认用户到底要什么，而不是先把所有模块都拉进内存。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>尽早分流</strong>
+            <p>像 `--version` 这种轻请求，应该立刻返回，而不是走完整启动链路。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>复杂路径才打点</strong>
+            <p>真正要进重型启动流程时，才开始记录性能检查点。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快路径：版本号几乎零成本返回</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/cli.tsx`（第 34-48 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const args = process.argv.slice(2);</span>
+<span class="code-line"></span>
+<span class="code-line">// Fast-path for --version/-v: zero module loading needed</span>
+<span class="code-line">if (args.length === 1 &amp;&amp; (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {</span>
+<span class="code-line">  // MACRO.VERSION is inlined at build time</span>
+<span class="code-line">  console.log(`${MACRO.VERSION} (Claude Code)`);</span>
+<span class="code-line">  return;</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const {</span>
+<span class="code-line">  profileCheckpoint</span>
+<span class="code-line">} = await import('../utils/startupProfiler.js');</span>
+<span class="code-line">profileCheckpoint('cli_entry');</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">先拿到原始命令行参数。</p>
+            <p class="tl">如果用户只问版本号，那这就是轻请求，不值得唤醒重系统。</p>
+            <p class="tl">直接打印构建时注入的版本并返回。</p>
+            <p class="tl">只有真正的会话路径，才去动态导入 startup profiler 并开始打点。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">`MACRO.VERSION` 是编译期常量，不是运行期查表</strong>
+          <p>这意味着版本号读取几乎没有额外 runtime 成本。值在构建时就已经烘焙进产物里了。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">startup profiler 把“感觉慢”拆成具名阶段</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/startupProfiler.ts`（第 50-54 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">import_time: ['cli_entry', 'main_tsx_imports_loaded'],</span>
+<span class="code-line">init_time: ['init_function_start', 'init_function_end'],</span>
+<span class="code-line">settings_time: ['eagerLoadSettings_start', 'eagerLoadSettings_end'],</span>
+<span class="code-line">total_time: ['cli_entry', 'main_after_run'],</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这里没有笼统地说“启动慢”，而是把启动切成具名区间。</p>
+            <p class="tl">每个阶段都由两个 checkpoint 定义，因此可以非常明确地追责到某一段耗时。</p>
+            <p class="tl">这是工程上真正有用的性能诊断方式，而不是凭体感猜。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧪</div>
+        <div class="callout-content">
+          <strong class="callout-title">这不是演示代码，是你可以直接用的诊断工具</strong>
+          <p>你现在就可以跑 `CLAUDE_CODE_PROFILE_STARTUP=1 claude --version`，看启动到底慢在 import、init 还是 settings。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">分阶段加载链路</h2>
+      <p class="animate-in">真正的重路径是分层推进的：`cli.tsx` 先分流，profiler 负责观测，`main.tsx` 负责重型 bootstrap，随后 `setup()`、`getCommands()`、`getAgentDefinitions()` 再并行展开。</p>
+      <div class="flow-animation animate-in" data-initial-label="点击“下一步”开始" data-steps='[
+        {"highlight":"flow-actor-1","label":"用户执行 claude"},
+        {"highlight":"flow-actor-2","label":"cli.tsx 读取参数并判断是否命中快路径","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"非轻请求才启动 profiler","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"main.tsx 进入重型 bootstrap：权限、工具、命令、状态","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"setup 与命令加载并行完成后，REPL 才真正出现","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">人</div><span>用户</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">入</div><span>CLI</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">测</div><span>Profiler</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">启</div><span>main.tsx</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">界</div><span>REPL</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">点击“下一步”开始</div>
+        <div class="flow-controls">
+          <button class="btn flow-next-btn">下一步</button>
+          <button class="btn flow-reset-btn">重来</button>
+          <span class="flow-progress"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module1-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`--version` 的关键不是“做得少”，而是几乎不进入重型 import 链路。" data-explanation-wrong="这里最核心的优化点是：版本号路径在完整启动前就返回了，所以不会支付重型 import 成本。">
+          <h3 class="quiz-question">为什么 `claude --version` 会显得非常快？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它会启动一个更轻的 REPL</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它在完整启动 import 之前就直接返回了</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它跳过了参数解析</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。`profileCheckpoint('cli_entry')` 的价值在于把启动耗时锚定到具体阶段，而不是留下一个模糊的“慢”。" data-explanation-wrong="这类 checkpoint 的意义是建立阶段边界，为后续性能诊断提供证据。">
+          <h3 class="quiz-question">`profileCheckpoint('cli_entry')` 真正重要在哪里？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它给启动诊断建立了明确的阶段起点</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它负责给 REPL 打开语法高亮</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它会预先放行所有工具权限</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。性能需求要说到阶段，否则只是在制造模糊任务。" data-explanation-wrong="“优化启动”这种话太空了。更强的表达应该点到具体阶段，比如 import_time 或 settings_time。">
+          <h3 class="quiz-question">如果你要让 AI 帮你优化启动，哪种提法最有效？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“帮我把所有东西都变快一点。”</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“把 main.tsx 全部重写。”</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“`import_time` 回归了，优先优化早期 import 路径。”</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-2">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">角色出场</h1>
+      <p class="module-subtitle">用户看到“一个助手”，系统实际是责任接力链：入口分流、引导初始化、界面承载、回合编排、工具执行。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">把架构看成职责地图，不要看成一团“应用”</h2>
+      <p class="animate-in">架构理解的关键不是背文件名，而是建立责任映射。入口层只做分流，bootstrap 只做初始化，REPL 只做交互承载，QueryEngine 只做回合推进，工具层只做外部执行。</p>
+      <div class="arch-diagram animate-in">
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">分流</h4>
+          <div class="arch-component" data-desc="读取命令行参数，决定启动路径。">
+            <div class="arch-icon">🚪</div>
+            <span>cli.tsx</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">引导</h4>
+          <div class="arch-component" data-desc="组装权限、工具、命令、状态和启动上下文。">
+            <div class="arch-icon">🧰</div>
+            <span>main.tsx</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">交互</h4>
+          <div class="arch-component" data-desc="App 是壳层，REPL 是用户真正看到的终端交互循环。">
+            <div class="arch-icon">🖥️</div>
+            <span>App + REPL</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">执行</h4>
+          <div class="arch-component" data-desc="QueryEngine 推进回合，工具层执行具体动作。">
+            <div class="arch-icon">🔁</div>
+            <span>QueryEngine + Tools</span>
+          </div>
+        </div>
+        <div class="arch-description">点击角色查看它的职责。</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">显示层也是按需加载的</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/replLauncher.tsx`（第 12-21 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function launchRepl(...): Promise&lt;void&gt; {</span>
+<span class="code-line">  const { App } = await import('./components/App.js');</span>
+<span class="code-line">  const { REPL } = await import('./screens/REPL.js');</span>
+<span class="code-line">  await renderAndRun(root, &lt;App {...appProps}&gt;&lt;REPL {...replProps} /&gt;&lt;/App&gt;);</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">交互式路径真正需要时，才去加载 App 壳层和 REPL 视图。</p>
+            <p class="tl">REPL 被包在 App 里面，意味着它复用了会话级上下文，而不是孤立存在。</p>
+            <p class="tl">这就是典型的壳层与屏幕分离：外层负责全局，内层负责当前交互。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">工具目录本身就在讲“专人专岗”</h2>
+      <div class="file-tree animate-in">
+        <div class="ft-folder open">
+          <span class="ft-name">source/claude-code-source/src/tools/</span>
+          <span class="ft-desc">每个工具只负责一种能力</span>
+          <div class="ft-children">
+            <div class="ft-folder">
+              <span class="ft-name">BashTool/</span>
+              <span class="ft-desc">跑 shell 命令</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">FileReadTool/</span>
+              <span class="ft-desc">读取本地文件</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">FileEditTool/</span>
+              <span class="ft-desc">以补丁方式改文件</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">MCPTool/</span>
+              <span class="ft-desc">调用远程 MCP 服务</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">WebFetchTool/</span>
+              <span class="ft-desc">抓网页内容</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">“关注点分离”不是教科书套话，而是操作杠杆</strong>
+          <p>一旦职责边界清楚，你以后给 AI 的需求就能精确很多，比如“改 QueryEngine 的回合策略，不要碰 REPL 渲染”。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">把架构当成群聊看一遍</h2>
+      <div class="chat-window animate-in" id="chat-module2-zh">
+        <div class="chat-messages">
+          <div class="chat-message" data-msg="0" data-sender="a" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-1)">入</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-1)">cli.tsx</span>
+              <p>收到请求，判断这是交互式启动，不是轻量命令。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="1" data-sender="b" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-2)">启</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-2)">main.tsx</span>
+              <p>我去把权限、工具、命令和会话状态组装好。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="2" data-sender="c" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-3)">界</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-3)">REPL</span>
+              <p>界面已经起来，用户输入接下来会进入 QueryEngine。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="3" data-sender="d" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-4)">循</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-4)">QueryEngine</span>
+              <p>我负责推进这一回合，需要工具时会发出调用请求。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="4" data-sender="e" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-5)">工</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-5)">Tool</span>
+              <p>具体动作由我执行，结果再回到循环里。</p>
+            </div>
+          </div>
+        </div>
+        <div class="chat-typing" id="chat-module2-zh-typing" style="display:none">
+          <div class="chat-avatar" id="chat-module2-zh-typing-avatar">?</div>
+          <div class="chat-typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>
+        </div>
+        <div class="chat-controls">
+          <button class="btn chat-next-btn">下一条</button>
+          <button class="btn chat-all-btn">播放全部</button>
+          <button class="btn chat-reset-btn">重播</button>
+          <span class="chat-progress"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module2-zh">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。真正去读文件的是工具层，QueryEngine 负责调度它，而不是模型自己直接操作文件系统。" data-explanation-wrong="模型会“请求”读文件，但真正执行读取的是 FileReadTool 这类具体工具。">
+          <h3 class="quiz-question">如果代理需要读取一个文件，真正执行读取动作的是谁？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 屏幕组件</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>system prompt 解析器</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>由 QueryEngine 调度的 FileReadTool</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。模型回合的推进逻辑首先应该看 QueryEngine，而不是先去界面层翻。" data-explanation-wrong="如果你要改的是回合推进或工具调用策略，最先该看的通常是 QueryEngine。">
+          <h3 class="quiz-question">如果你要调整一次回合的编排逻辑，第一站更应该看哪里？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/QueryEngine.ts`</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/replLauncher.tsx`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/tools.ts`</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。App 和 REPL 的拆分，本质上是把全局壳层职责和互动循环职责分开。" data-explanation-wrong="这类拆分不是语法要求，而是职责设计：外层共享上下文，内层专注交互本身。">
+          <h3 class="quiz-question">为什么 `App` 和 `REPL` 要拆成两个组件？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了避免动态导入语法</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了把全局壳层职责和交互循环职责分开</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 React 不允许单组件页面</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module2-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module2-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-3">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">对话循环</h1>
+      <p class="module-subtitle">单次请求不是“一问一答”，而是一个状态机循环：模型输出、工具调用、结果回写、下一轮决策。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">一个回合，往往包含很多次来回</h2>
+      <p class="animate-in">示例请求“修掉 auth.ts 的 bug”通常会触发多轮往返：读文件、跑测试、读错误、改文件、复测。用户看到是一回合，系统内部可能已执行多次模型-工具迭代。</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>拼上下文</strong>
+            <p>历史消息、system prompt、用户上下文和工具权限先被装配齐。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>模型给出下一步</strong>
+            <p>它可能直接回答，也可能发出结构化的 `tool_use` 请求。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>工具执行</strong>
+            <p>真正的读文件、跑命令、查资源，都在工具层发生。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>结果回写，再继续</strong>
+            <p>工具结果会被追加回消息流，成为下一轮模型决策的输入。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">真正把一回合交给 `query()` 的地方</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts`（第 675-686 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">for await (const message of query({</span>
+<span class="code-line">  messages,</span>
+<span class="code-line">  systemPrompt,</span>
+<span class="code-line">  userContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">  canUseTool: wrappedCanUseTool,</span>
+<span class="code-line">  toolUseContext: processUserInputContext,</span>
+<span class="code-line">  fallbackModel,</span>
+<span class="code-line">  querySource: 'sdk',</span>
+<span class="code-line">  maxTurns,</span>
+<span class="code-line">  taskBudget,</span>
+<span class="code-line">})) {</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这不是一次普通函数调用，而是一段异步消息流。</p>
+            <p class="tl">回合推进需要完整上下文：历史消息、规则、工具权限、预算上限。</p>
+            <p class="tl">`for await` 说明系统在逐条消费模型和工具回来的事件，而不是等一个最终字符串。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">并发读，串行写</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/tools/toolOrchestration.ts`（第 19-30、35-41、64-71 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function* runTools(</span>
+<span class="code-line">  toolUseMessages: ToolUseBlock[],</span>
+<span class="code-line">  assistantMessages: AssistantMessage[],</span>
+<span class="code-line">  canUseTool: CanUseToolFn,</span>
+<span class="code-line">  toolUseContext: ToolUseContext,</span>
+<span class="code-line">): AsyncGenerator&lt;MessageUpdate, void&gt; {</span>
+<span class="code-line">  let currentContext = toolUseContext</span>
+<span class="code-line">  for (const { isConcurrencySafe, blocks } of partitionToolCalls(...)) {</span>
+<span class="code-line">    if (isConcurrencySafe) {</span>
+<span class="code-line">      // Run read-only batch concurrently</span>
+<span class="code-line">      for await (const update of runToolsConcurrently(...)) {</span>
+<span class="code-line">        yield { message: update.message, newContext: currentContext }</span>
+<span class="code-line">      }</span>
+<span class="code-line">    } else {</span>
+<span class="code-line">      // Run non-read-only batch serially</span>
+<span class="code-line">      for await (const update of runToolsSerially(...)) {</span>
+<span class="code-line">        yield { message: update.message, newContext: currentContext }</span>
+<span class="code-line">      }</span>
+<span class="code-line">    }</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">工具不会一股脑乱跑，系统会先按风险和语义把调用分批。</p>
+            <p class="tl">只读工具可以并发，因为顺序通常不重要；改文件、跑命令这类动作则必须串行。</p>
+            <p class="tl">这就是为什么“同时读 5 个文件”通常很快，而“连续改 5 个文件”不会被强行并发。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">上下文快满时，系统会主动压缩</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/compact/autoCompact.ts`（第 62-76 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const AUTOCOMPACT_BUFFER_TOKENS = 13_000</span>
+<span class="code-line">export const WARNING_THRESHOLD_BUFFER_TOKENS = 20_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function getAutoCompactThreshold(model: string): number {</span>
+<span class="code-line">  const effectiveContextWindow = getEffectiveContextWindowSize(model)</span>
+<span class="code-line">  const autocompactThreshold =</span>
+<span class="code-line">    effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS</span>
+<span class="code-line">  return autocompactThreshold</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">长会话不会无限膨胀到把上下文窗口顶爆。</p>
+            <p class="tl">系统会在逼近阈值时主动 compact，把旧历史压缩成摘要，给后续回合腾空间。</p>
+            <p class="tl">所以“模型像是还记得前文”本质上往往是“它重新读了保留下来的压缩历史”。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧠</div>
+        <div class="callout-content">
+          <strong class="callout-title">模型不是在“记住”，而是在反复重读</strong>
+          <p>每一轮都要重新带上当前上下文，所以长对话的成本和稳定性问题，本质上都和上下文管理有关。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">把一个回合走一遍</h2>
+      <div class="flow-animation animate-in" data-initial-label="点击“下一步”开始" data-steps='[
+        {"highlight":"flow-actor-1","label":"用户发出一个修 bug 请求"},
+        {"highlight":"flow-actor-2","label":"QueryEngine 组装完整上下文","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"模型输出文本或 tool_use 请求","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"工具执行并把结果回写为 tool_result","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"下一轮模型基于新增结果继续决策，直到 end_turn 或预算耗尽","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">用</div><span>用户</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">循</div><span>QueryEngine</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">模</div><span>模型</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">工</div><span>工具</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">回</div><span>下一轮</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">点击“下一步”开始</div>
+        <div class="flow-controls">
+          <button class="btn flow-next-btn">下一步</button>
+          <button class="btn flow-reset-btn">重来</button>
+          <span class="flow-progress"></span>
+        </div>
+      </div>
+
+      <div class="quiz-container animate-in" id="quiz-module3-zh" style="margin-top: var(--space-8);">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。工具调度的关键不是“全并发”或“全串行”，而是按安全性分批：只读并发，变更串行。" data-explanation-wrong="这里最关键的工程判断是：读操作可以并发，写和执行类操作要串行。">
+          <h3 class="quiz-question">如果模型一次性请求了多项工具，系统最合理的执行策略是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>无论什么工具都全部并发</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按安全性分批：只读并发，修改类串行</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>无论什么工具都全部串行</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。代理反复调用同一工具，优先怀疑回合循环里的反馈链或停止条件，而不是先怪 UI。" data-explanation-wrong="这种“同一工具不停重复”通常发生在循环衔接层：tool_result 没被正确利用，或者 stop condition 没生效。">
+          <h3 class="quiz-question">如果代理不停重复调用同一个工具，第一怀疑点应该是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>QueryEngine 与 tool_result 之间的反馈链或停止条件出了问题</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主题样式渲染有问题</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>CLI 的版本号快路径写错了</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。`maxTurns` 控制的是一次请求内部允许发生多少轮模型/工具往返。" data-explanation-wrong="它不是限制仓库大小，也不是限制工具数量，而是限制一个回合内部的迭代深度。">
+          <h3 class="quiz-question">`maxTurns` 在这个系统里真正约束的是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>一个仓库最多能改多少个文件</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>工具池里最多能暴露多少个工具</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>一次回合内部最多允许多少轮模型与工具往返</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-4">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">工具与外部世界</h1>
+      <p class="module-subtitle">模型只负责决策，工具才负责执行。文件系统、shell、网页和远程服务访问都发生在工具/连接器边界。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先把工具分门别类</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">📁</div>
+          <h4 class="pattern-title">文件系统工具</h4>
+          <p class="pattern-desc">Read、Edit、Write、Glob、Grep，负责本地代码库上的观察与修改。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧪</div>
+          <h4 class="pattern-title">执行工具</h4>
+          <p class="pattern-desc">Bash、PowerShell 等，负责把“想法”落成可执行动作。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🌐</div>
+          <h4 class="pattern-title">Web 工具</h4>
+          <p class="pattern-desc">Fetch、Search 等，用来获取本地没有的外部信息。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🧩</div>
+          <h4 class="pattern-title">MCP 连接器</h4>
+          <p class="pattern-desc">通过协议接入远程能力，让数据库、浏览器、IDE 等都能以工具形式暴露给代理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">一次工具调用到底怎么走</h2>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>模型发出 `tool_use`</strong>
+            <p>它不会自己执行动作，只会提出“我想调用某个工具”的结构化请求。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>QueryEngine 检查权限</strong>
+            <p>调用先过权限门，再决定是允许、询问还是拒绝。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>工具或连接器执行</strong>
+            <p>真正的文件读取、命令执行、远程请求在这一层发生。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>结果写回回合</strong>
+            <p>执行结果会变成 `tool_result` 再回到下一轮模型上下文里。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">“模型坏了”通常是错误诊断</strong>
+          <p>如果文件没读到、命令没跑通、远程会话过期，根因更可能在工具层或连接器层，而不是模型推理本身。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">MCP 会话过期是一个真实而常见的失败模式</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts`（第 193-205 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function isMcpSessionExpiredError(error: Error): boolean {</span>
+<span class="code-line">  const httpStatus = 'code' in error ? (error as Error &amp; { code?: number }).code : undefined</span>
+<span class="code-line">  if (httpStatus !== 404) return false</span>
+<span class="code-line">  return (</span>
+<span class="code-line">    error.message.includes('"code":-32001') ||</span>
+<span class="code-line">    error.message.includes('"code": -32001')</span>
+<span class="code-line">  )</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">一个 404 本身是不够的，它可能是 URL 错，也可能是 session 真过期了。</p>
+            <p class="tl">所以运行时还要进一步检查错误消息里是否包含 JSON-RPC 的 `-32001`。</p>
+            <p class="tl">这一步很关键，因为只有把失败类型判准，后续才知道该走“重连重试”还是“彻底报错”。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">连接器元数据本身也会吞上下文预算</h2>
+      <p class="animate-in">MCP 风险不只在会话状态，也在描述体积。OpenAPI 生成连接器常把大量接口文档塞进工具描述；不做截断时，元数据本身就会侵占上下文预算。</p>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">MAX_MCP_DESCRIPTION_LENGTH</code>
+          <span class="badge-desc">把工具或服务描述限制在 2048 个字符，避免文档洪水挤占上下文</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">MCP_TOOL_TIMEOUT</code>
+          <span class="badge-desc">远程工具调用的超时窗口可配置，避免无限等待</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">McpAuthError</code>
+          <span class="badge-desc">把鉴权失败显式建模，便于上层走恢复路径</span>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">📦</div>
+        <div class="callout-content">
+          <strong class="callout-title">连接器不是“接上就行”，它也要做上下文预算管理</strong>
+          <p>工具越多、描述越胖、超时时间越乱，代理越容易在非模型层面失控。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module4-zh">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。session 过期首先说明连接器生命周期或远程会话状态有问题，不等于模型推理失效。" data-explanation-wrong="看到带 `-32001` 的 404，第一反应应该是连接层会话失效，而不是把锅先甩给模型。">
+          <h3 class="quiz-question">一个 MCP 调用报 session expired，最合理的第一诊断是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 渲染出错</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>模型忘了 system prompt</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>连接器的会话生命周期出了问题，需要重连或重试</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。工具层就是把模型决策转成现实动作的边界，没有它，代理就只有文本输出，没有执行能力。" data-explanation-wrong="工具层不是附属品，它是模型决策落地的执行边界。">
+          <h3 class="quiz-question">为什么说工具架构是 agent 产品的核心之一？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它负责把模型决策变成真实的数据访问与动作执行</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它能完全取代 system prompt</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它能绕开权限系统</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。既然已经有结构化协议入口，就优先走结构化入口，而不是自己乱抓网页文本。" data-explanation-wrong="MCP 资源之所以更优，是因为它天然更结构化、更可控，也更适合 agent 使用。">
+          <h3 class="quiz-question">如果一个系统同时能网页抓取，也能通过 MCP 提供结构化资源，优先该走哪条路？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>总是优先抓原始 HTML</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>优先走 MCP 结构化资源路径</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把远程接入逻辑都塞进 UI 层</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-5">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">05</span>
+      <h1 class="module-title">权限与信任</h1>
+      <p class="module-subtitle">高能力不配边界就是高风险。权限系统的价值在于把执行权切到正确粒度，而不是增加交互摩擦。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">权限模式，本质上是不同信任档位</h2>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">default</code>
+          <span class="badge-desc">敏感动作默认先询问</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">acceptEdits</code>
+          <span class="badge-desc">偏向自动接受编辑类动作</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">bypassPermissions</code>
+          <span class="badge-desc">广义自动放行，风险最高</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">plan</code>
+          <span class="badge-desc">以规划为主，执行能力更收敛</span>
+        </div>
+      </div>
+      <p class="animate-in">安全策略不是“开”或“关”，而是“粒度是否正确”。规则越具体，授权面越可控。</p>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">规则匹配不是一句“允许 Bash”这么粗</h2>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">Bash(git status)</code>
+          <span class="badge-desc">只批准一个具体命令，粒度最细</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Bash(git:*)</code>
+          <span class="badge-desc">批准一类 git 命令，边界变宽</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Bash(*)</code>
+          <span class="badge-desc">几乎等于把整个 shell 提前放行，风险骤增</span>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">权限规则最怕的不是复杂，而是过宽</strong>
+          <p>一条看起来“很省事”的广泛授权，通常意味着你把本来该逐次审查的能力直接整体放出去了。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">什么样的 Bash 规则会被判成危险</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissionSetup.ts`（第 94-147 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function isDangerousBashPermission(toolName: string, ruleContent: string | undefined): boolean {</span>
+<span class="code-line">  if (toolName !== BASH_TOOL_NAME) return false</span>
+<span class="code-line">  if (ruleContent === undefined || ruleContent === '') return true</span>
+<span class="code-line">  const content = ruleContent.trim().toLowerCase()</span>
+<span class="code-line">  if (content === '*') return true</span>
+<span class="code-line">  for (const pattern of DANGEROUS_BASH_PATTERNS) { ... }</span>
+<span class="code-line">  return false</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">如果 Bash 规则连内容都没有，本质上就是“整类动作全放行”。</p>
+            <p class="tl">单独一个 `*` 也一样，它代表的是近乎无限扩张的匹配范围。</p>
+            <p class="tl">后面还会继续用危险模式表去兜住解释器、shell 和更宽的执行入口。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">危险模式表和 auto mode 断路器</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/dangerousPatterns.ts`（第 18-42、44-52 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const CROSS_PLATFORM_CODE_EXEC = [</span>
+<span class="code-line">  'python', 'node', 'deno', 'tsx', 'ruby', 'perl', 'php', 'lua',</span>
+<span class="code-line">  'npx', 'bunx', 'npm run', 'yarn run', 'pnpm run', 'bun run',</span>
+<span class="code-line">  'bash', 'sh', 'ssh',</span>
+<span class="code-line">] as const</span>
+<span class="code-line"></span>
+<span class="code-line">export const DANGEROUS_BASH_PATTERNS: readonly string[] = [</span>
+<span class="code-line">  ...CROSS_PLATFORM_CODE_EXEC, 'zsh', 'fish', 'eval', 'exec', 'env', 'xargs', 'sudo',</span>
+<span class="code-line">]</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这份列表的共同点很简单：它们都能把“允许一个命令”扩张成“允许执行任意代码”。</p>
+            <p class="tl">解释器、shell、包运行器、提权命令都在里面，因为这些入口一旦被宽泛放行，auto mode 的分类器几乎形同虚设。</p>
+          </div>
+        </div>
+      </div>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/autoModeState.ts`（第 27-33 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function setAutoModeCircuitBroken(broken: boolean): void {</span>
+<span class="code-line">  autoModeCircuitBroken = broken</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function isAutoModeCircuitBroken(): boolean {</span>
+<span class="code-line">  return autoModeCircuitBroken</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">auto mode 不是永远可重入的。一旦安全断路器被打断，上层逻辑就可以阻止它悄悄重新开启。</p>
+            <p class="tl">这是一种非常典型的“防止错误配置自动复活”的防线。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module5-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`Bash(*)` 的真实含义几乎就是“给整个 shell 预先授权”，所以它的危险点在权限范围，而不是语法形式。" data-explanation-wrong="危险的关键不是星号本身，而是它把授权范围扩到了几乎所有 shell 命令。">
+          <h3 class="quiz-question">为什么 `Bash(*)` 会被视为高风险授权？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 TypeScript 很难解析星号</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它近似于给任意 shell 执行预先放行</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它会关闭 startup profiler</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。更好的权限设计永远是“先窄后宽”，优先授权一个具体动作，而不是一整个类别。" data-explanation-wrong="最稳的做法是为明确命令写窄规则，而不是一上来就把整类 shell 行为都打开。">
+          <h3 class="quiz-question">如果你希望代理自动执行一个可信的小命令，更好的配置策略是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只批准那个具体命令模式</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>直接把所有 shell 命令一起放开</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>彻底关掉权限系统</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果自动执行突然频繁变成确认弹窗，首先就该怀疑规则太宽，被安全层剥离出了 auto-allow 路径。" data-explanation-wrong="优先查策略层，而不是先怀疑交互界面。很多“突然开始要求确认”的症状，根因就在规则被剥离或模式被断路。">
+          <h3 class="quiz-question">如果某个动作以前能自动跑，现在却频繁要求确认，最值得先怀疑什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 动画回归</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主题样式令牌错配</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>规则被判定过宽，因此从 auto-allow 路径中剥离了</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-6">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">06</span>
+      <h1 class="module-title">速度技巧与排障</h1>
+      <p class="module-subtitle">速度来自系统性编排，不来自单点技巧：可并行就并行，可延后就延后，可观测就留证据。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">并行启动不是锦上添花，而是直接省等待</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（约 1919-1932 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {</span>
+<span class="code-line">  initBuiltinPlugins();</span>
+<span class="code-line">  initBundledSkills();</span>
+<span class="code-line">}</span>
+<span class="code-line">const setupPromise = setup(preSetupCwd, permissionMode, ...);</span>
+<span class="code-line">const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);</span>
+<span class="code-line">const agentDefsPromise = worktreeEnabled ? null : getAgentDefinitionsWithOverrides(preSetupCwd);</span>
+<span class="code-line">commandsPromise?.catch(() => {});</span>
+<span class="code-line">agentDefsPromise?.catch(() => {});</span>
+<span class="code-line">await setupPromise;</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">先把极轻的内存内初始化做掉，然后立刻并行启动 `setup`、命令加载和 agent 定义加载。</p>
+            <p class="tl">这里的关键不是某一行代码，而是顺序设计：先完成必要前置，再让独立重任务重叠执行。</p>
+            <p class="tl">这类优化没有“魔法感”，但对启动体感极其有效。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">startup profiler 给你的是阶段证据，不是情绪</h2>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">import_time</code>
+          <span class="badge-desc">看早期 import 与模块装载是否膨胀</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">init_time</code>
+          <span class="badge-desc">看初始化逻辑是否拖慢启动</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">settings_time</code>
+          <span class="badge-desc">看设置加载是否成为瓶颈</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">total_time</code>
+          <span class="badge-desc">看整条链路总耗时</span>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">诊断性能，先问“慢在哪一段”</strong>
+          <p>启动慢、回合慢、上下文管理慢，这三种慢的修法根本不同。先定位阶段，再谈优化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">文件快照：代理的“可回滚痕迹”</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/fileHistory.ts`（第 39-70 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export type FileHistorySnapshot = {</span>
+<span class="code-line">  messageId: UUID</span>
+<span class="code-line">  trackedFileBackups: Record&lt;string, FileHistoryBackup&gt;</span>
+<span class="code-line">  timestamp: Date</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const MAX_SNAPSHOTS = 100</span>
+<span class="code-line"></span>
+<span class="code-line">export function fileHistoryEnabled(): boolean {</span>
+<span class="code-line">  return (</span>
+<span class="code-line">    getGlobalConfig().fileCheckpointingEnabled !== false &amp;&amp;</span>
+<span class="code-line">    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING)</span>
+<span class="code-line">  )</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">每次代理改文件时，系统都可以留下与 message 对应的快照。</p>
+            <p class="tl">这不是“锦上添花”的日志，而是后续回滚和排障的硬证据。</p>
+            <p class="tl">最多保留 100 个快照，够用，而且不会无限膨胀。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">auto-compact：上下文靠近上限时的缓冲策略</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/compact/autoCompact.ts`（第 62-76 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const AUTOCOMPACT_BUFFER_TOKENS = 13_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function getAutoCompactThreshold(model: string): number {</span>
+<span class="code-line">  const effectiveContextWindow = getEffectiveContextWindowSize(model)</span>
+<span class="code-line">  const autocompactThreshold =</span>
+<span class="code-line">    effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS</span>
+<span class="code-line">  return autocompactThreshold</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">系统不会等上下文完全撞线才处理，而是提前留出缓冲带。</p>
+            <p class="tl">当历史逼近阈值时，旧内容会被压缩总结，为后续回合腾出空间。</p>
+            <p class="tl">这也是长会话能继续跑下去的关键基础设施之一。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">如果明天就要排一个问题，先看哪儿</h2>
+      <div class="file-tree animate-in">
+        <div class="ft-folder open">
+          <span class="ft-name">source/claude-code-source/src/</span>
+          <span class="ft-desc">几个高命中率的排障入口</span>
+          <div class="ft-children">
+            <div class="ft-file">
+              <span class="ft-name">entrypoints/cli.tsx</span>
+              <span class="ft-desc">看启动分流和快路径是否异常</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">main.tsx</span>
+              <span class="ft-desc">看 bootstrap 顺序与并行启动</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">QueryEngine.ts</span>
+              <span class="ft-desc">看一回合内部的推进逻辑</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">services/mcp/client.ts</span>
+              <span class="ft-desc">看远程连接与会话失效</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">utils/permissions/permissionSetup.ts</span>
+              <span class="ft-desc">看为什么动作被允许、拒绝或改成需确认</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiz-container animate-in" id="quiz-module6-zh" style="margin-top: var(--space-8);">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。并行化独立启动工作，是最直接也最稳定的启动优化手段之一。" data-explanation-wrong="这里的关键不是神秘优化，而是让彼此独立的启动任务重叠执行。">
+          <h3 class="quiz-question">`setupPromise`、`commandsPromise` 这类写法背后的核心性能思想是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把独立启动工作并行起来，减少纯等待时间</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把 REPL 多渲染一次来热缓存</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有逻辑收进一个文件里减少 import</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果体感是“启动慢了”，优先看最早的分流入口和最重的 bootstrap 链路。" data-explanation-wrong="启动慢优先看入口和 bootstrap，而不是随机跳去 UI 样式或某个工具细节。">
+          <h3 class="quiz-question">如果一次改动后产品明显“启动更慢了”，第一批最值得看的文件是？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主题色和 tooltip 样式</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只看 QueryEngine 循环内部</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/entrypoints/cli.tsx` 和 `source/claude-code-source/src/main.tsx`</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。这门课真正训练的不是背文件名，而是先把症状映射到责任边界，再去看证据。" data-explanation-wrong="好排障的起点不是随机翻文件，而是先问：这个症状最像哪一层的责任？">
+          <h3 class="quiz-question">这门课想真正帮你建立的排障能力是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有 import path 背下来</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先把症状映射到负责的层，再沿着边界去看证据</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>任何问题都先重写模块</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-7">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">07</span>
+      <h1 class="module-title">上下文工程</h1>
+      <p class="module-subtitle">Claude Code 的关键不在“写一句更聪明的 prompt”，而在于它如何在模型开口前，把系统提示、工具、规则文件、记忆和历史上下文组装成一整套运行时上下文。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">prompt 只是露在外面的尖端</h2>
+      <p class="animate-in">在真实运行里，模型从来不是只看用户一句话。它看到的是拼装后的上下文栈：system prompt、工具 schema、`CLAUDE.md` 层级、memory 文件、以及经过压缩后的会话历史。所谓 <span class="term" data-definition="上下文工程，指的是决定模型在每一轮到底能看到什么、按什么顺序看到、谁优先级更高。">上下文工程</span>，本质上就是这套拼装系统。</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">📘</div>
+          <h4 class="pattern-title">System prompt</h4>
+          <p class="pattern-desc">定义角色、约束、安全边界和工具可用性。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🗂️</div>
+          <h4 class="pattern-title">规则文件</h4>
+          <p class="pattern-desc">`CLAUDE.md`、`.claude/CLAUDE.md`、rules 文件共同决定 repo 级行为。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🧠</div>
+          <h4 class="pattern-title">记忆与历史</h4>
+          <p class="pattern-desc">memory、session history 和 compact 结果决定下一轮“还能记住什么”。</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">很多“prompt 不行”的问题，其实是上下文栈组装错了</strong>
+          <p>如果代理忽略 repo 规范、忘了前面结论、或者行为突然变形，第一怀疑对象通常不是模型，而是上下文装配链。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">system prompt 不是常量字符串，而是装配产物</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts`（第 284-300 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">headlessProfilerCheckpoint('before_getSystemPrompt')</span>
+<span class="code-line">const customPrompt =</span>
+<span class="code-line">  typeof customSystemPrompt === 'string' ? customSystemPrompt : undefined</span>
+<span class="code-line">const {</span>
+<span class="code-line">  defaultSystemPrompt,</span>
+<span class="code-line">  userContext: baseUserContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">} = await fetchSystemPromptParts({</span>
+<span class="code-line">  tools,</span>
+<span class="code-line">  mainLoopModel: initialMainLoopModel,</span>
+<span class="code-line">  additionalWorkingDirectories: Array.from(</span>
+<span class="code-line">    initialAppState.toolPermissionContext.additionalWorkingDirectories.keys(),</span>
+<span class="code-line">  ),</span>
+<span class="code-line">  mcpClients,</span>
+<span class="code-line">  customSystemPrompt: customPrompt,</span>
+<span class="code-line">})</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这里没有把 system prompt 当成硬编码字符串直接塞进去。</p>
+            <p class="tl">工具集合、主模型、额外工作目录、MCP 客户端和自定义覆盖项，都会一起参与 system prompt 的构建。</p>
+            <p class="tl">所以真正送到模型前的“提示词”，本质上是一个小型编译产物。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">CLAUDE.md 本身就是分层系统</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/claudemd.ts`（第 1-16 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">/**</span>
+<span class="code-line"> * Files are loaded in the following order:</span>
+<span class="code-line"> *</span>
+<span class="code-line"> * 1. Managed memory (eg. /etc/claude-code/CLAUDE.md) - Global instructions for all users</span>
+<span class="code-line"> * 2. User memory (~/.claude/CLAUDE.md) - Private global instructions for all projects</span>
+<span class="code-line"> * 3. Project memory (CLAUDE.md, .claude/CLAUDE.md, and .claude/rules/*.md in project roots) - Instructions checked into the codebase</span>
+<span class="code-line"> * 4. Local memory (CLAUDE.local.md in project roots) - Private project-specific instructions</span>
+<span class="code-line"> *</span>
+<span class="code-line"> * Files are loaded in reverse order of priority, i.e. the latest files are highest priority</span>
+<span class="code-line"> * with the model paying more attention to them.</span>
+<span class="code-line"> */</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`CLAUDE.md` 不是一个文件，而是一组不同层级的指令源。</p>
+            <p class="tl">系统级、用户级、项目级、本地级，一层比一层更贴近当前工作上下文。</p>
+            <p class="tl">这也是为什么“为什么在这个 repo 里行为不一样”通常要先问：到底哪一层规则在生效。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">记忆文件发现也是运行时工程，不只是语义工程</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/claudemd.ts`（第 790-804、886-900 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const getMemoryFiles = memoize(</span>
+<span class="code-line">  async (forceIncludeExternal: boolean = false): Promise&lt;MemoryFileInfo[]&gt; =&gt; {</span>
+<span class="code-line">    const result: MemoryFileInfo[] = []</span>
+<span class="code-line">    const processedPaths = new Set&lt;string&gt;()</span>
+<span class="code-line">    const config = getCurrentProjectConfig()</span>
+<span class="code-line">    const includeExternal =</span>
+<span class="code-line">      forceIncludeExternal ||</span>
+<span class="code-line">      config.hasClaudeMdExternalIncludesApproved ||</span>
+<span class="code-line">      false</span>
+<span class="code-line"></span>
+<span class="code-line">    if (isSettingSourceEnabled('projectSettings') &amp;&amp; !skipProject) {</span>
+<span class="code-line">      const projectPath = join(dir, 'CLAUDE.md')</span>
+<span class="code-line">      result.push(...(await processMemoryFile(projectPath, 'Project', processedPaths, includeExternal)))</span>
+<span class="code-line">      const dotClaudePath = join(dir, '.claude', 'CLAUDE.md')</span>
+<span class="code-line">      result.push(...(await processMemoryFile(dotClaudePath, 'Project', processedPaths, includeExternal)))</span>
+<span class="code-line">    }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这里既要保证找到正确的规则文件，也要避免每一轮都重新全量扫描。</p>
+            <p class="tl">所以 `getMemoryFiles` 本身被 memoize 了，说明上下文工程同样要考虑性能。</p>
+            <p class="tl">对 agent 来说，“什么该被看到”与“多快被组装出来”是同一问题的两面。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module7-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。如果 repo 规范突然失效，优先怀疑上下文装配链：规则没被加载、优先级不对、或者被 compact 掉了。" data-explanation-wrong="这类症状最常见的根因不是“模型突然变笨”，而是上下文栈出了问题。">
+          <h3 class="quiz-question">代理突然不再遵守写在 `CLAUDE.md` 里的 repo 规范，最值得先怀疑什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>模型一夜之间退化了</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>上下文栈或 `CLAUDE.md` 的加载路径出了问题</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>代码查看器的字体不对</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。越靠近当前工作目录的规则，越应该拥有更高的实际优先级。" data-explanation-wrong="分层规则的核心就是“越贴近当前上下文，越应该更有约束力”。">
+          <h3 class="quiz-question">在 monorepo 里，哪个指令层更应该对某个子包生效？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>永远是最老的全局 managed 文件</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>用户 memory 必须覆盖一切项目规则</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>离当前工作目录更近的项目规则文件</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。记忆文件发现被 memoize，核心原因就是不能把上下文发现成本无限叠加到每一轮。" data-explanation-wrong="缓存的重点不是“文件永不变化”，而是避免每轮重复支付高昂发现成本。">
+          <h3 class="quiz-question">为什么 `getMemoryFiles` 要做 memoize？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为每轮都重新扫描记忆文件会带来不必要的运行时开销</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为记忆文件在会话中绝不会变化</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 TypeScript 强制要求这么写</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module7-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module7-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-8">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">08</span>
+      <h1 class="module-title">扩展体系：MCP、Skills、Plugins</h1>
+      <p class="module-subtitle">能力扩展不是一把锤子。MCP 解决外部系统接入，Skills 解决流程复用，Plugins 解决深层运行时扩展。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先分层：三种扩展机制解决三类问题</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)"><div class="pattern-icon" style="background: var(--color-actor-1)">🌐</div><h4 class="pattern-title">MCP</h4><p class="pattern-desc">通过协议把外部工具/资源接入代理，重点是连接与隔离边界。</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)"><div class="pattern-icon" style="background: var(--color-actor-2)">🧩</div><h4 class="pattern-title">Skills</h4><p class="pattern-desc">把重复工作流沉淀成可复用命令，重点是效率和一致性。</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)"><div class="pattern-icon" style="background: var(--color-actor-3)">🪝</div><h4 class="pattern-title">Plugins</h4><p class="pattern-desc">在运行时关键节点注入能力，重点是深度集成与治理。</p></div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content"><strong class="callout-title">默认优先低耦合层</strong><p>能用 Skills 解决就别先写 Plugin；能用 MCP 解决外部接入，就别把协议逻辑塞进 prompt。</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">MCP 命名空间保证能力身份不冲突</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/mcpStringUtils.ts`（第 35-52 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getMcpPrefix(serverName: string): string {</span>
+<span class="code-line">  return `mcp__${normalizeNameForMCP(serverName)}__`</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function buildMcpToolName(serverName: string, toolName: string): string {</span>
+<span class="code-line">  return `${getMcpPrefix(serverName)}${normalizeNameForMCP(toolName)}`</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">MCP 工具名采用 `mcp__server__tool` 规范，不和内置工具抢名字。</p>
+            <p class="tl">权限匹配因此可以精确到“哪个服务器上的哪个工具”。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">支持资源能力的 MCP 连接会自动注入读资源工具</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts`（第 2171-2193 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const supportsResources = !!client.capabilities?.resources</span>
+<span class="code-line">const resourceTools: Tool[] = []</span>
+<span class="code-line">if (supportsResources) {</span>
+<span class="code-line">  const hasResourceTools = [ListMcpResourcesTool, ReadMcpResourceTool].some(</span>
+<span class="code-line">    tool => tools.some(t => toolMatchesName(t, tool.name)),</span>
+<span class="code-line">  )</span>
+<span class="code-line">  if (!hasResourceTools) {</span>
+<span class="code-line">    resourceTools.push(ListMcpResourcesTool, ReadMcpResourceTool)</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">服务器声明有 resources 能力时，系统会补齐资源枚举/读取工具。</p>
+            <p class="tl">补齐过程是幂等的，不会重复注入。</p>
+          </div>
+        </div>
+      </div>
+      <p class="animate-in">同时，MCP 描述文本会做长度上限控制，防止连接器元数据吞掉上下文预算。</p>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Skills 走 Markdown 装载，但要按来源做安全分层</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/skills/loadSkillsDir.ts`（第 371-373、404-467 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// Security: MCP skills are remote and untrusted — never execute inline shell commands</span>
+<span class="code-line">if (loadedFrom !== 'mcp') {</span>
+<span class="code-line">  finalContent = await executeShellCommandsInPrompt(...)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const skillFilePath = join(skillDirPath, 'SKILL.md')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">本地 skills 可以按策略执行受控 shell 片段。</p>
+            <p class="tl">MCP 来源 skills 被视为远程不可信内容，禁用内联 shell 执行路径。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content"><strong class="callout-title">“可读”不等于“可执行”</strong><p>远程扩展内容可以参与推理，但执行权必须单独授权，不能隐式继承。</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Plugins 负责更深层的运行时扩展面</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/types/plugin.ts` 与 `src/entrypoints/sdk/coreTypes.ts`</p>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">组件面</code><span class="badge-desc">`commands`、`agents`、`skills`、`hooks`、`output-styles`，以及可选 MCP/LSP 服务器</span></div>
+        <div class="badge-item"><code class="badge-code">钩子事件</code><span class="badge-desc">`PreToolUse`、`PostToolUse`、`UserPromptSubmit`、`SessionStart`、`PostCompact` 等</span></div>
+        <div class="badge-item"><code class="badge-code">治理面</code><span class="badge-desc">启停状态、安装来源、错误类型化与加载检查</span></div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>要连外部系统</strong><p>优先 MCP。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>要复用人类工作流</strong><p>优先 Skills。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>要改运行时行为</strong><p>才用 Plugins。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module8-zh">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。数据库这类外部能力接入属于 MCP 的典型场景。" data-explanation-wrong="这类需求核心是“协议化外部接入”，不是单纯把提示词写长。">
+          <h3 class="quiz-question">你要让代理稳定访问内部数据库服务，首选哪一层扩展？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP 服务器接入</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只写一个本地 Skill</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先重写启动 profiler</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。命名空间的价值在身份隔离与权限精确匹配。" data-explanation-wrong="`mcp__server__tool` 不是命名风格偏好，而是运行时安全与路由需求。">
+          <h3 class="quiz-question">`mcp__server__tool` 这套命名规范最核心的作用是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>减少日志长度，提升启动速度</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>强制所有工具只读</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>避免工具名冲突，并支持精细权限匹配</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。远程 MCP skill 被视作不可信来源，必须禁止隐式 shell 执行链路。" data-explanation-wrong="关键不在 Skill 格式，而在来源信任级别：远程内容不能直接获得执行权。">
+          <h3 class="quiz-question">为什么 `loadedFrom === 'mcp'` 时要跳过内联 shell 执行？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 MCP 工具不能处理文本输入</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 MCP 来源的 skill 是远程不可信内容，需要更严格执行边界</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为所有本地 skill 只能在 plan mode 运行</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module8-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module8-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p class="footer-title">CCStudy 编辑版</p>
+        <p class="footer-note">这份静态技术档案按“可审计学习”设计：从用户动作一路追到源码实现边界。</p>
+        <p class="footer-links">
+          <a class="footer-link" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">https://github.com/bagaking/ccstudy</a>
+        </p>
+      </div>
+    </footer>
+  </main>
+
+</body>
+</html>

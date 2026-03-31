@@ -1,0 +1,138 @@
+<section class="module" id="module-1">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">From Prompt to Action</h1>
+      <p class="module-subtitle">Startup is staged on purpose. Cheap requests pay almost zero cost, and heavy systems only wake up when needed.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">The Millisecond After You Press Enter</h2>
+      <p class="animate-in">When you run <span class="term" data-definition="CLI means Command Line Interface: you control the program by typing commands in a terminal.">`claude`</span>, the process starts by reading `process.argv`. It does not load the whole agent first. It asks one routing question: is this a tiny fast-path request or a full interactive session?</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Read args</strong><p>Parse command-line input and classify intent.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Branch early</strong><p>Short commands return immediately with no heavy imports.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Profile real startup</strong><p>Only non-trivial flows turn on startup checkpoints.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Fast Path: Zero Heavy Imports for Version</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/cli.tsx` (lines 34-48)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const args = process.argv.slice(2);</span>
+<span class="code-line"></span>
+<span class="code-line">// Fast-path for --version/-v: zero module loading needed</span>
+<span class="code-line">if (args.length === 1 &amp;&amp; (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {</span>
+<span class="code-line">  // MACRO.VERSION is inlined at build time</span>
+<span class="code-line">  console.log(`${MACRO.VERSION} (Claude Code)`);</span>
+<span class="code-line">  return;</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const {</span>
+<span class="code-line">  profileCheckpoint</span>
+<span class="code-line">} = await import('../utils/startupProfiler.js');</span>
+<span class="code-line">profileCheckpoint('cli_entry');</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Grab command-line args first.</p>
+            <p class="tl">If request is only version, print and exit immediately.</p>
+            <p class="tl">No heavy startup modules are loaded for that path.</p>
+            <p class="tl">Only real sessions import the startup profiler.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">Compile-time constant, runtime savings</strong>
+          <p><span class="term" data-definition="Compile-time means value substitution happens during build, before the app runs.">`MACRO.VERSION`</span> is injected at build time, so version reads are effectively free at runtime.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Startup Profiler Defines Named Phases</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/startupProfiler.ts` (lines 50-54)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">import_time: ['cli_entry', 'main_tsx_imports_loaded'],</span>
+<span class="code-line">init_time: ['init_function_start', 'init_function_end'],</span>
+<span class="code-line">settings_time: ['eagerLoadSettings_start', 'eagerLoadSettings_end'],</span>
+<span class="code-line">total_time: ['cli_entry', 'main_after_run'],</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Startup is measured in named windows, not vague “slow” feelings.</p>
+            <p class="tl">Each phase is a pair of checkpoints.</p>
+            <p class="tl">That gives you blame precision when startup regresses.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Staged Chain: What Loads When</h2>
+      <div class="flow-animation animate-in" data-initial-label="Click &quot;Next Step&quot; to begin" data-steps='[
+        {"highlight":"flow-actor-1","label":"User runs claude"},
+        {"highlight":"flow-actor-2","label":"cli.tsx reads args and checks fast path","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"Profiler starts for real startup","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"main.tsx bootstraps tools, permissions, and commands","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"REPL launches after setup and command loading","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">U</div><span>User</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">C</div><span>CLI</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">P</div><span>Profiler</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">M</div><span>main.tsx</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">R</div><span>REPL</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">Click "Next Step" to begin</div>
+        <div class="flow-controls">
+          <button class="btn flow-next-btn">Next Step</button>
+          <button class="btn flow-reset-btn">Restart</button>
+          <span class="flow-progress"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module1">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Version path returns before heavy startup import cost." data-explanation-wrong="Version is handled as a fast path with immediate return.">
+          <h3 class="quiz-question">What is the primary reason `claude --version` feels instant?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It launches REPL with fewer components</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It returns before full startup imports</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It skips argument parsing entirely</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Named checkpoints convert latency into debuggable phase data." data-explanation-wrong="The profiler exists to identify where startup time is spent by phase.">
+          <h3 class="quiz-question">Why does `profileCheckpoint('cli_entry')` matter?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It anchors phase timing for startup diagnostics</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It enables syntax highlighting in REPL</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It authorizes all tools in advance</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Startup slowness should be diagnosed by phase, not by generic intuition." data-explanation-wrong="Use profiler phases (import/init/settings/total) before proposing fixes.">
+          <h3 class="quiz-question">You need to ask an AI agent to optimize startup. Best phrasing?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“Make everything faster somehow.”</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“Rewrite main.tsx from scratch.”</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“`import_time` regressed; optimize early import path.”</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

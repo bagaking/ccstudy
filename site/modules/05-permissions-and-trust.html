@@ -1,0 +1,121 @@
+<section class="module" id="module-5">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">05</span>
+      <h1 class="module-title">Permissions and Trust</h1>
+      <p class="module-subtitle">High capability without explicit policy boundaries is risk. Permission design is a precision control layer, not UI ceremony.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Permission Modes Are Trust Profiles</h2>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">default</code><span class="badge-desc">Ask before sensitive operations</span></div>
+        <div class="badge-item"><code class="badge-code">acceptEdits</code><span class="badge-desc">Auto-accept edit-oriented operations</span></div>
+        <div class="badge-item"><code class="badge-code">bypassPermissions</code><span class="badge-desc">Broad auto-allow mode (high-risk)</span></div>
+        <div class="badge-item"><code class="badge-code">plan</code><span class="badge-desc">Planning mode with constrained execution behavior</span></div>
+      </div>
+      <p class="animate-in">Safe configuration means tight <span class="term" data-definition="Rule scope means how broad a rule’s match pattern is. Tight scope approves less behavior.">rule scope</span>: narrow allowlists first, broad patterns last.</p>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">What Counts as Dangerous Bash Rule</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissionSetup.ts` (lines 94-147)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export function isDangerousBashPermission(toolName: string, ruleContent: string | undefined): boolean {</span>
+<span class="code-line">  if (toolName !== BASH_TOOL_NAME) return false</span>
+<span class="code-line">  if (ruleContent === undefined || ruleContent === '') return true</span>
+<span class="code-line">  const content = ruleContent.trim().toLowerCase()</span>
+<span class="code-line">  if (content === '*') return true</span>
+<span class="code-line">  for (const pattern of DANGEROUS_BASH_PATTERNS) { ... }</span>
+<span class="code-line">  return false</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Blank rule content means effectively “allow everything.”</p>
+          <p class="tl">Wildcard `*` is treated as dangerous by definition.</p>
+          <p class="tl">Interpreter and broad execution patterns are blocked from silent auto-allow flows.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Dangerous Pattern Sources and Circuit Breaker</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/dangerousPatterns.ts` (lines 18-42, 44-53)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export const CROSS_PLATFORM_CODE_EXEC = [</span>
+<span class="code-line">  'python', 'node', 'deno', 'tsx', 'ruby', 'perl', 'php', 'lua',</span>
+<span class="code-line">  'npx', 'bunx', 'npm run', 'yarn run', 'pnpm run', 'bun run',</span>
+<span class="code-line">  'bash', 'sh', 'ssh',</span>
+<span class="code-line">] as const</span>
+<span class="code-line"></span>
+<span class="code-line">export const DANGEROUS_BASH_PATTERNS: readonly string[] = [</span>
+<span class="code-line">  ...CROSS_PLATFORM_CODE_EXEC, 'zsh', 'fish', 'eval', 'exec', 'env', 'xargs', 'sudo',</span>
+<span class="code-line">]</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">These patterns represent broad code execution vectors.</p>
+          <p class="tl">Auto mode strips over-broad allows that would bypass classifier safety intent.</p>
+          <p class="tl">This is layered defense, not trust-by-default.</p>
+        </div></div>
+      </div>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/autoModeState.ts` (lines 27-33)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export function setAutoModeCircuitBroken(broken: boolean): void {</span>
+<span class="code-line">  autoModeCircuitBroken = broken</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function isAutoModeCircuitBroken(): boolean {</span>
+<span class="code-line">  return autoModeCircuitBroken</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Auto mode has a circuit-breaker state to prevent unsafe silent re-entry.</p>
+          <p class="tl">Once tripped, higher-level logic can enforce explicit recovery path.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Permission Decision Path</h2>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Tool request arrives</strong><p>Model emits structured request with tool name and arguments.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Rule matching runs</strong><p>Exact, prefix, wildcard shapes are evaluated against policy sets.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Dangerous broad allows stripped</strong><p>Auto mode removes unsafe blanket approvals.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Allow / ask / deny</strong><p>Execution proceeds only after policy resolution.</p></div></div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content"><strong class="callout-title">Broad permission is often implicit arbitrary code execution</strong><p>`Bash(*)` convenience can silently become unrestricted command authority.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module5">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. `Bash(*)` approximates unconstrained shell authority." data-explanation-wrong="The risk is broad implicit command approval, not syntax aesthetics.">
+          <h3 class="quiz-question">Why is `Bash(*)` high-risk in agent workflows?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Wildcard parsing is unstable in TypeScript</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It effectively pre-approves arbitrary shell execution</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It disables startup profiling</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Tight allowlists preserve utility while minimizing authority surface." data-explanation-wrong="Best practice is narrow, explicit command scope.">
+          <h3 class="quiz-question">Best configuration for safe auto-run of one trusted command?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Approve only that exact command pattern</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Approve all shell commands in one wildcard</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Disable permission checks globally</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Frequent prompts after policy changes often indicate rule stripping or mode-level guardrails." data-explanation-wrong="Inspect permission policy layer before blaming UI interaction code.">
+          <h3 class="quiz-question">Auto-run stopped and confirm prompts increased. Most likely first hypothesis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL animation regression</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme style token mismatch</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rule classified as too broad and removed from auto-allow path</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

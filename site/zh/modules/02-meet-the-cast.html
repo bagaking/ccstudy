@@ -1,0 +1,195 @@
+<section class="module" id="module-2">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">角色出场</h1>
+      <p class="module-subtitle">用户看到“一个助手”，系统实际是责任接力链：入口分流、引导初始化、界面承载、回合编排、工具执行。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">把架构看成职责地图，不要看成一团“应用”</h2>
+      <p class="animate-in">架构理解的关键不是背文件名，而是建立责任映射。入口层只做分流，bootstrap 只做初始化，REPL 只做交互承载，QueryEngine 只做回合推进，工具层只做外部执行。</p>
+      <div class="arch-diagram animate-in">
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">分流</h4>
+          <div class="arch-component" data-desc="读取命令行参数，决定启动路径。">
+            <div class="arch-icon">🚪</div>
+            <span>cli.tsx</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">引导</h4>
+          <div class="arch-component" data-desc="组装权限、工具、命令、状态和启动上下文。">
+            <div class="arch-icon">🧰</div>
+            <span>main.tsx</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">交互</h4>
+          <div class="arch-component" data-desc="App 是壳层，REPL 是用户真正看到的终端交互循环。">
+            <div class="arch-icon">🖥️</div>
+            <span>App + REPL</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">执行</h4>
+          <div class="arch-component" data-desc="QueryEngine 推进回合，工具层执行具体动作。">
+            <div class="arch-icon">🔁</div>
+            <span>QueryEngine + Tools</span>
+          </div>
+        </div>
+        <div class="arch-description">点击角色查看它的职责。</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">显示层也是按需加载的</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/replLauncher.tsx`（第 12-21 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function launchRepl(...): Promise&lt;void&gt; {</span>
+<span class="code-line">  const { App } = await import('./components/App.js');</span>
+<span class="code-line">  const { REPL } = await import('./screens/REPL.js');</span>
+<span class="code-line">  await renderAndRun(root, &lt;App {...appProps}&gt;&lt;REPL {...replProps} /&gt;&lt;/App&gt;);</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">交互式路径真正需要时，才去加载 App 壳层和 REPL 视图。</p>
+            <p class="tl">REPL 被包在 App 里面，意味着它复用了会话级上下文，而不是孤立存在。</p>
+            <p class="tl">这就是典型的壳层与屏幕分离：外层负责全局，内层负责当前交互。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">工具目录本身就在讲“专人专岗”</h2>
+      <div class="file-tree animate-in">
+        <div class="ft-folder open">
+          <span class="ft-name">source/claude-code-source/src/tools/</span>
+          <span class="ft-desc">每个工具只负责一种能力</span>
+          <div class="ft-children">
+            <div class="ft-folder">
+              <span class="ft-name">BashTool/</span>
+              <span class="ft-desc">跑 shell 命令</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">FileReadTool/</span>
+              <span class="ft-desc">读取本地文件</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">FileEditTool/</span>
+              <span class="ft-desc">以补丁方式改文件</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">MCPTool/</span>
+              <span class="ft-desc">调用远程 MCP 服务</span>
+            </div>
+            <div class="ft-folder">
+              <span class="ft-name">WebFetchTool/</span>
+              <span class="ft-desc">抓网页内容</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">“关注点分离”不是教科书套话，而是操作杠杆</strong>
+          <p>一旦职责边界清楚，你以后给 AI 的需求就能精确很多，比如“改 QueryEngine 的回合策略，不要碰 REPL 渲染”。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">把架构当成群聊看一遍</h2>
+      <div class="chat-window animate-in" id="chat-module2-zh">
+        <div class="chat-messages">
+          <div class="chat-message" data-msg="0" data-sender="a" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-1)">入</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-1)">cli.tsx</span>
+              <p>收到请求，判断这是交互式启动，不是轻量命令。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="1" data-sender="b" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-2)">启</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-2)">main.tsx</span>
+              <p>我去把权限、工具、命令和会话状态组装好。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="2" data-sender="c" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-3)">界</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-3)">REPL</span>
+              <p>界面已经起来，用户输入接下来会进入 QueryEngine。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="3" data-sender="d" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-4)">循</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-4)">QueryEngine</span>
+              <p>我负责推进这一回合，需要工具时会发出调用请求。</p>
+            </div>
+          </div>
+          <div class="chat-message" data-msg="4" data-sender="e" style="display:none">
+            <div class="chat-avatar" style="background: var(--color-actor-5)">工</div>
+            <div class="chat-bubble">
+              <span class="chat-sender" style="color: var(--color-actor-5)">Tool</span>
+              <p>具体动作由我执行，结果再回到循环里。</p>
+            </div>
+          </div>
+        </div>
+        <div class="chat-typing" id="chat-module2-zh-typing" style="display:none">
+          <div class="chat-avatar" id="chat-module2-zh-typing-avatar">?</div>
+          <div class="chat-typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>
+        </div>
+        <div class="chat-controls">
+          <button class="btn chat-next-btn">下一条</button>
+          <button class="btn chat-all-btn">播放全部</button>
+          <button class="btn chat-reset-btn">重播</button>
+          <span class="chat-progress"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module2-zh">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。真正去读文件的是工具层，QueryEngine 负责调度它，而不是模型自己直接操作文件系统。" data-explanation-wrong="模型会“请求”读文件，但真正执行读取的是 FileReadTool 这类具体工具。">
+          <h3 class="quiz-question">如果代理需要读取一个文件，真正执行读取动作的是谁？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 屏幕组件</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>system prompt 解析器</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>由 QueryEngine 调度的 FileReadTool</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。模型回合的推进逻辑首先应该看 QueryEngine，而不是先去界面层翻。" data-explanation-wrong="如果你要改的是回合推进或工具调用策略，最先该看的通常是 QueryEngine。">
+          <h3 class="quiz-question">如果你要调整一次回合的编排逻辑，第一站更应该看哪里？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/QueryEngine.ts`</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/replLauncher.tsx`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/tools.ts`</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。App 和 REPL 的拆分，本质上是把全局壳层职责和互动循环职责分开。" data-explanation-wrong="这类拆分不是语法要求，而是职责设计：外层共享上下文，内层专注交互本身。">
+          <h3 class="quiz-question">为什么 `App` 和 `REPL` 要拆成两个组件？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了避免动态导入语法</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了把全局壳层职责和交互循环职责分开</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 React 不允许单组件页面</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module2-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module2-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

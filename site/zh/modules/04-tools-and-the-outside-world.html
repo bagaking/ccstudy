@@ -1,0 +1,163 @@
+<section class="module" id="module-4">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">工具与外部世界</h1>
+      <p class="module-subtitle">模型只负责决策，工具才负责执行。文件系统、shell、网页和远程服务访问都发生在工具/连接器边界。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先把工具分门别类</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">📁</div>
+          <h4 class="pattern-title">文件系统工具</h4>
+          <p class="pattern-desc">Read、Edit、Write、Glob、Grep，负责本地代码库上的观察与修改。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧪</div>
+          <h4 class="pattern-title">执行工具</h4>
+          <p class="pattern-desc">Bash、PowerShell 等，负责把“想法”落成可执行动作。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🌐</div>
+          <h4 class="pattern-title">Web 工具</h4>
+          <p class="pattern-desc">Fetch、Search 等，用来获取本地没有的外部信息。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🧩</div>
+          <h4 class="pattern-title">MCP 连接器</h4>
+          <p class="pattern-desc">通过协议接入远程能力，让数据库、浏览器、IDE 等都能以工具形式暴露给代理。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">一次工具调用到底怎么走</h2>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>模型发出 `tool_use`</strong>
+            <p>它不会自己执行动作，只会提出“我想调用某个工具”的结构化请求。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>QueryEngine 检查权限</strong>
+            <p>调用先过权限门，再决定是允许、询问还是拒绝。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>工具或连接器执行</strong>
+            <p>真正的文件读取、命令执行、远程请求在这一层发生。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>结果写回回合</strong>
+            <p>执行结果会变成 `tool_result` 再回到下一轮模型上下文里。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">“模型坏了”通常是错误诊断</strong>
+          <p>如果文件没读到、命令没跑通、远程会话过期，根因更可能在工具层或连接器层，而不是模型推理本身。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">MCP 会话过期是一个真实而常见的失败模式</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts`（第 193-205 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function isMcpSessionExpiredError(error: Error): boolean {</span>
+<span class="code-line">  const httpStatus = 'code' in error ? (error as Error &amp; { code?: number }).code : undefined</span>
+<span class="code-line">  if (httpStatus !== 404) return false</span>
+<span class="code-line">  return (</span>
+<span class="code-line">    error.message.includes('"code":-32001') ||</span>
+<span class="code-line">    error.message.includes('"code": -32001')</span>
+<span class="code-line">  )</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">一个 404 本身是不够的，它可能是 URL 错，也可能是 session 真过期了。</p>
+            <p class="tl">所以运行时还要进一步检查错误消息里是否包含 JSON-RPC 的 `-32001`。</p>
+            <p class="tl">这一步很关键，因为只有把失败类型判准，后续才知道该走“重连重试”还是“彻底报错”。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">连接器元数据本身也会吞上下文预算</h2>
+      <p class="animate-in">MCP 风险不只在会话状态，也在描述体积。OpenAPI 生成连接器常把大量接口文档塞进工具描述；不做截断时，元数据本身就会侵占上下文预算。</p>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">MAX_MCP_DESCRIPTION_LENGTH</code>
+          <span class="badge-desc">把工具或服务描述限制在 2048 个字符，避免文档洪水挤占上下文</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">MCP_TOOL_TIMEOUT</code>
+          <span class="badge-desc">远程工具调用的超时窗口可配置，避免无限等待</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">McpAuthError</code>
+          <span class="badge-desc">把鉴权失败显式建模，便于上层走恢复路径</span>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">📦</div>
+        <div class="callout-content">
+          <strong class="callout-title">连接器不是“接上就行”，它也要做上下文预算管理</strong>
+          <p>工具越多、描述越胖、超时时间越乱，代理越容易在非模型层面失控。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module4-zh">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。session 过期首先说明连接器生命周期或远程会话状态有问题，不等于模型推理失效。" data-explanation-wrong="看到带 `-32001` 的 404，第一反应应该是连接层会话失效，而不是把锅先甩给模型。">
+          <h3 class="quiz-question">一个 MCP 调用报 session expired，最合理的第一诊断是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 渲染出错</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>模型忘了 system prompt</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>连接器的会话生命周期出了问题，需要重连或重试</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。工具层就是把模型决策转成现实动作的边界，没有它，代理就只有文本输出，没有执行能力。" data-explanation-wrong="工具层不是附属品，它是模型决策落地的执行边界。">
+          <h3 class="quiz-question">为什么说工具架构是 agent 产品的核心之一？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它负责把模型决策变成真实的数据访问与动作执行</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它能完全取代 system prompt</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它能绕开权限系统</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。既然已经有结构化协议入口，就优先走结构化入口，而不是自己乱抓网页文本。" data-explanation-wrong="MCP 资源之所以更优，是因为它天然更结构化、更可控，也更适合 agent 使用。">
+          <h3 class="quiz-question">如果一个系统同时能网页抓取，也能通过 MCP 提供结构化资源，优先该走哪条路？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>总是优先抓原始 HTML</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>优先走 MCP 结构化资源路径</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把远程接入逻辑都塞进 UI 层</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

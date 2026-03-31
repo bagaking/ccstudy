@@ -1,0 +1,119 @@
+<section class="module" id="module-4">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">Tools and the Outside World</h1>
+      <p class="module-subtitle">The model decides. Tools act. External systems fail independently, so diagnosis must happen at the connector boundary.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Tool Taxonomy</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)"><div class="pattern-icon" style="background: var(--color-actor-1)">📁</div><h4 class="pattern-title">Filesystem</h4><p class="pattern-desc">Read/Edit/Write/Glob/Grep on local repository files.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)"><div class="pattern-icon" style="background: var(--color-actor-2)">🧪</div><h4 class="pattern-title">Execution</h4><p class="pattern-desc">Bash/PowerShell for runnable diagnostics and commands.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)"><div class="pattern-icon" style="background: var(--color-actor-3)">🌐</div><h4 class="pattern-title">Web</h4><p class="pattern-desc">Fetch/Search for live external context.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)"><div class="pattern-icon" style="background: var(--color-actor-4)">🧩</div><h4 class="pattern-title">MCP Connectors</h4><p class="pattern-desc">Remote tool/resource interface through MCP protocol.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">MCP Session Expiry Detection</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts` (lines 193-205)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export function isMcpSessionExpiredError(error: Error): boolean {</span>
+<span class="code-line">  const httpStatus = 'code' in error ? (error as Error &amp; { code?: number }).code : undefined</span>
+<span class="code-line">  if (httpStatus !== 404) return false</span>
+<span class="code-line">  return (</span>
+<span class="code-line">    error.message.includes('"code":-32001') ||</span>
+<span class="code-line">    error.message.includes('"code": -32001')</span>
+<span class="code-line">  )</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">A plain 404 is ambiguous.</p>
+          <p class="tl">The runtime checks JSON-RPC code `-32001` to classify session-expired state.</p>
+          <p class="tl">Correct classification enables reconnect/retry logic instead of wrong failure handling.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Context Protection in Connector Metadata</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts` (~215-220)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">/**</span>
+<span class="code-line"> * Cap on MCP tool descriptions and server instructions sent to the model.</span>
+<span class="code-line"> * ... observed dumping 15-60KB ...</span>
+<span class="code-line"> */</span>
+<span class="code-line">const MAX_MCP_DESCRIPTION_LENGTH = 2048</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Connector metadata can explode token usage.</p>
+          <p class="tl">Description capping keeps MCP integrations from silently consuming context budget.</p>
+          <p class="tl">This is a reliability and cost control move, not just formatting.</p>
+        </div></div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">MAX_MCP_DESCRIPTION_LENGTH</code><span class="badge-desc">2048 chars cap for tool/server descriptions</span></div>
+        <div class="badge-item"><code class="badge-code">MCP_TOOL_TIMEOUT</code><span class="badge-desc">Configurable tool-call timeout window</span></div>
+        <div class="badge-item"><code class="badge-code">McpAuthError</code><span class="badge-desc">Explicit auth failure type for recovery flow</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Tool Call as Message Exchange</h2>
+      <div class="flow-animation animate-in" data-initial-label="Click &quot;Next Step&quot; to begin" data-steps='[
+        {"highlight":"flow-actor-1","label":"Model emits a tool_use request"},
+        {"highlight":"flow-actor-2","label":"QueryEngine validates permission gates","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"Tool/connector executes against target system","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"Result is normalized to tool_result message","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"Next model round consumes returned result","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">M</div><span>Model</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">Q</div><span>QueryEngine</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">T</div><span>Tool/MCP</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">R</div><span>tool_result</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">N</div><span>Next round</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">Click "Next Step" to begin</div>
+        <div class="flow-controls"><button class="btn flow-next-btn">Next Step</button><button class="btn flow-reset-btn">Restart</button><span class="flow-progress"></span></div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content"><strong class="callout-title">“Model is broken” is often the wrong diagnosis</strong><p>If tool execution or connector session state fails, root cause is usually outside model inference itself.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module4">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Correct. Session-expired classification points to connector lifecycle, not model cognition." data-explanation-wrong="404 + JSON-RPC code -32001 is a connector session diagnosis.">
+          <h3 class="quiz-question">An MCP call returns session-expired. Best first diagnosis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL rendering bug</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Model forgot prompt rules</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Connector/session lifecycle failure requiring reconnect/retry</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Tool layer is the runtime action boundary." data-explanation-wrong="Tools are the execution hands of the system, not optional wrappers.">
+          <h3 class="quiz-question">Why is tool architecture central in agent systems?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It bridges model decisions to real-world actions and data access</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It replaces system prompts entirely</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It avoids permission requirements</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Yes. Structured MCP resources reduce scraping ambiguity and improve reliability." data-explanation-wrong="Prefer structured protocol resources over ad-hoc scraping when available.">
+          <h3 class="quiz-question">You have both raw page scraping and MCP resource access. Preferred path?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always scrape raw HTML first</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Prefer MCP structured resource path first</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Move integration into UI layer</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

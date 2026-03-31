@@ -1,0 +1,167 @@
+<section class="module" id="module-1">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">从提示到行动</h1>
+      <p class="module-subtitle">启动链路本身就是性能架构：轻请求即时返回，重系统按需唤醒，不做无效初始化。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">你按下回车后的第一毫秒</h2>
+      <p class="animate-in">执行 <span class="term" data-definition="CLI 是命令行界面：你通过在终端里输入命令来控制程序。">`claude`</span> 后，进程先做分流判定，不做全量加载。固定顺序是：读 `process.argv`，判定请求级别，再决定是否进入重型启动链路。</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>读参数</strong>
+            <p>先确认用户到底要什么，而不是先把所有模块都拉进内存。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>尽早分流</strong>
+            <p>像 `--version` 这种轻请求，应该立刻返回，而不是走完整启动链路。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>复杂路径才打点</strong>
+            <p>真正要进重型启动流程时，才开始记录性能检查点。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快路径：版本号几乎零成本返回</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/cli.tsx`（第 34-48 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const args = process.argv.slice(2);</span>
+<span class="code-line"></span>
+<span class="code-line">// Fast-path for --version/-v: zero module loading needed</span>
+<span class="code-line">if (args.length === 1 &amp;&amp; (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {</span>
+<span class="code-line">  // MACRO.VERSION is inlined at build time</span>
+<span class="code-line">  console.log(`${MACRO.VERSION} (Claude Code)`);</span>
+<span class="code-line">  return;</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const {</span>
+<span class="code-line">  profileCheckpoint</span>
+<span class="code-line">} = await import('../utils/startupProfiler.js');</span>
+<span class="code-line">profileCheckpoint('cli_entry');</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">先拿到原始命令行参数。</p>
+            <p class="tl">如果用户只问版本号，那这就是轻请求，不值得唤醒重系统。</p>
+            <p class="tl">直接打印构建时注入的版本并返回。</p>
+            <p class="tl">只有真正的会话路径，才去动态导入 startup profiler 并开始打点。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">`MACRO.VERSION` 是编译期常量，不是运行期查表</strong>
+          <p>这意味着版本号读取几乎没有额外 runtime 成本。值在构建时就已经烘焙进产物里了。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">startup profiler 把“感觉慢”拆成具名阶段</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/startupProfiler.ts`（第 50-54 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">import_time: ['cli_entry', 'main_tsx_imports_loaded'],</span>
+<span class="code-line">init_time: ['init_function_start', 'init_function_end'],</span>
+<span class="code-line">settings_time: ['eagerLoadSettings_start', 'eagerLoadSettings_end'],</span>
+<span class="code-line">total_time: ['cli_entry', 'main_after_run'],</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这里没有笼统地说“启动慢”，而是把启动切成具名区间。</p>
+            <p class="tl">每个阶段都由两个 checkpoint 定义，因此可以非常明确地追责到某一段耗时。</p>
+            <p class="tl">这是工程上真正有用的性能诊断方式，而不是凭体感猜。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧪</div>
+        <div class="callout-content">
+          <strong class="callout-title">这不是演示代码，是你可以直接用的诊断工具</strong>
+          <p>你现在就可以跑 `CLAUDE_CODE_PROFILE_STARTUP=1 claude --version`，看启动到底慢在 import、init 还是 settings。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">分阶段加载链路</h2>
+      <p class="animate-in">真正的重路径是分层推进的：`cli.tsx` 先分流，profiler 负责观测，`main.tsx` 负责重型 bootstrap，随后 `setup()`、`getCommands()`、`getAgentDefinitions()` 再并行展开。</p>
+      <div class="flow-animation animate-in" data-initial-label="点击“下一步”开始" data-steps='[
+        {"highlight":"flow-actor-1","label":"用户执行 claude"},
+        {"highlight":"flow-actor-2","label":"cli.tsx 读取参数并判断是否命中快路径","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"非轻请求才启动 profiler","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"main.tsx 进入重型 bootstrap：权限、工具、命令、状态","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"setup 与命令加载并行完成后，REPL 才真正出现","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">人</div><span>用户</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">入</div><span>CLI</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">测</div><span>Profiler</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">启</div><span>main.tsx</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">界</div><span>REPL</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">点击“下一步”开始</div>
+        <div class="flow-controls">
+          <button class="btn flow-next-btn">下一步</button>
+          <button class="btn flow-reset-btn">重来</button>
+          <span class="flow-progress"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module1-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`--version` 的关键不是“做得少”，而是几乎不进入重型 import 链路。" data-explanation-wrong="这里最核心的优化点是：版本号路径在完整启动前就返回了，所以不会支付重型 import 成本。">
+          <h3 class="quiz-question">为什么 `claude --version` 会显得非常快？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它会启动一个更轻的 REPL</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它在完整启动 import 之前就直接返回了</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它跳过了参数解析</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。`profileCheckpoint('cli_entry')` 的价值在于把启动耗时锚定到具体阶段，而不是留下一个模糊的“慢”。" data-explanation-wrong="这类 checkpoint 的意义是建立阶段边界，为后续性能诊断提供证据。">
+          <h3 class="quiz-question">`profileCheckpoint('cli_entry')` 真正重要在哪里？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它给启动诊断建立了明确的阶段起点</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它负责给 REPL 打开语法高亮</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它会预先放行所有工具权限</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。性能需求要说到阶段，否则只是在制造模糊任务。" data-explanation-wrong="“优化启动”这种话太空了。更强的表达应该点到具体阶段，比如 import_time 或 settings_time。">
+          <h3 class="quiz-question">如果你要让 AI 帮你优化启动，哪种提法最有效？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“帮我把所有东西都变快一点。”</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“把 main.tsx 全部重写。”</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“`import_time` 回归了，优先优化早期 import 路径。”</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

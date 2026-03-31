@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCStudy - Cloud Code 内部拆解</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../styles.css">
+
+  <style>
+    :root {
+      --nav-height: 64px;
+      --color-accent:       #A54A2A;
+      --color-accent-hover: #8E3F23;
+      --color-accent-light: #F8E7DF;
+      --color-accent-muted: #CC7D5B;
+    }
+  </style>
+
+  <script src="../main.js" defer></script>
+</head>
+<body data-mode="story">
+  <button class="rail-scrim" id="rail-scrim" type="button" aria-label="关闭目录"></button>
+
+  <nav class="nav" id="nav">
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="nav-inner">
+      <a class="brand-pill" href="#hero-dossier">
+        <span class="brand-dot"></span>
+        <span class="brand-label">CCStudy 档案</span>
+      </a>
+
+      <div class="nav-dots" id="nav-dots" role="tablist" aria-label="模块导航"></div>
+
+      <div class="nav-actions" aria-label="阅读控制">
+        <div class="mode-switch" role="group" aria-label="阅读模式">
+          <button class="mode-btn active" data-mode="story" type="button">叙事</button>
+          <button class="mode-btn" data-mode="audit" type="button">审计</button>
+        </div>
+        <a class="repo-link" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">GitHub 仓库</a>
+        <button class="contents-btn" id="contents-btn" type="button" aria-controls="chapter-rail" aria-expanded="false">目录</button>
+        <div class="lang-switches" aria-label="语言切换">
+          <a class="lang-switch" href="../index.html">EN</a>
+          <a class="lang-switch active" href="./index.html" aria-current="page">中文</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <aside class="chapter-rail" id="chapter-rail" aria-label="模块目录">
+    <div class="chapter-rail-head">
+      <strong>审计目录</strong>
+      <button class="contents-btn close" id="contents-close" type="button">关闭</button>
+    </div>
+    <ol class="chapter-list" id="chapter-list"></ol>
+  </aside>
+
+  <main id="main">
+    <section class="hero-dossier" id="hero-dossier">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="hero-kicker">反向还原产品笔记</p>
+          <h1 class="hero-title">Cloud Code 内部拆解</h1>
+          <p class="hero-subtitle">一份可审计的技术课程：从启动链路、角色边界、工具编排到权限模型，完整理解终端编码代理如何运作。</p>
+          <div class="hero-tags">
+            <span class="hero-tag">静态站点</span>
+            <span class="hero-tag">中英双语</span>
+            <span class="hero-tag">源码可追踪</span>
+          </div>
+          <div class="hero-ctas">
+            <a class="hero-cta primary" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">打开仓库</a>
+            <button class="hero-cta" id="hero-open-viewer" type="button" data-open-file="source/claude-code-source/src/entrypoints/cli.tsx">查看源码</button>
+          </div>
+        </div>
+        <div class="hero-metrics" id="hero-metrics">
+          <article class="metric-card">
+            <span class="metric-label">模块数</span>
+            <strong class="metric-value" id="metric-modules">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">测验数</span>
+            <strong class="metric-value" id="metric-quizzes">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">代码块</span>
+            <strong class="metric-value" id="metric-snippets">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">术语注释</span>
+            <strong class="metric-value" id="metric-terms">-</strong>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="code-viewer-shell" id="code-viewer-shell" aria-hidden="true">
+      <div class="code-viewer-backdrop" id="code-viewer-backdrop"></div>
+      <div class="code-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="code-viewer-path">
+        <div class="code-viewer-head">
+          <div>
+            <p class="code-viewer-kicker">源码查看器</p>
+            <h2 class="code-viewer-path" id="code-viewer-path">-</h2>
+          </div>
+          <div class="code-viewer-actions">
+            <a class="code-viewer-link" id="code-viewer-github" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">在 GitHub 打开</a>
+            <button class="code-viewer-close" id="code-viewer-close" type="button" aria-label="关闭源码查看器">关闭</button>
+          </div>
+        </div>
+        <div class="code-viewer-status" id="code-viewer-status">点击页面中的文件引用即可加载源码。</div>
+        <div class="code-viewer-body">
+          <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+        </div>
+      </div>
+    </section>

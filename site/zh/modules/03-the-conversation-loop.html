@@ -1,0 +1,205 @@
+<section class="module" id="module-3">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">对话循环</h1>
+      <p class="module-subtitle">单次请求不是“一问一答”，而是一个状态机循环：模型输出、工具调用、结果回写、下一轮决策。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">一个回合，往往包含很多次来回</h2>
+      <p class="animate-in">示例请求“修掉 auth.ts 的 bug”通常会触发多轮往返：读文件、跑测试、读错误、改文件、复测。用户看到是一回合，系统内部可能已执行多次模型-工具迭代。</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>拼上下文</strong>
+            <p>历史消息、system prompt、用户上下文和工具权限先被装配齐。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>模型给出下一步</strong>
+            <p>它可能直接回答，也可能发出结构化的 `tool_use` 请求。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>工具执行</strong>
+            <p>真正的读文件、跑命令、查资源，都在工具层发生。</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>结果回写，再继续</strong>
+            <p>工具结果会被追加回消息流，成为下一轮模型决策的输入。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">真正把一回合交给 `query()` 的地方</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts`（第 675-686 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">for await (const message of query({</span>
+<span class="code-line">  messages,</span>
+<span class="code-line">  systemPrompt,</span>
+<span class="code-line">  userContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">  canUseTool: wrappedCanUseTool,</span>
+<span class="code-line">  toolUseContext: processUserInputContext,</span>
+<span class="code-line">  fallbackModel,</span>
+<span class="code-line">  querySource: 'sdk',</span>
+<span class="code-line">  maxTurns,</span>
+<span class="code-line">  taskBudget,</span>
+<span class="code-line">})) {</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">这不是一次普通函数调用，而是一段异步消息流。</p>
+            <p class="tl">回合推进需要完整上下文：历史消息、规则、工具权限、预算上限。</p>
+            <p class="tl">`for await` 说明系统在逐条消费模型和工具回来的事件，而不是等一个最终字符串。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">并发读，串行写</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/tools/toolOrchestration.ts`（第 19-30、35-41、64-71 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function* runTools(</span>
+<span class="code-line">  toolUseMessages: ToolUseBlock[],</span>
+<span class="code-line">  assistantMessages: AssistantMessage[],</span>
+<span class="code-line">  canUseTool: CanUseToolFn,</span>
+<span class="code-line">  toolUseContext: ToolUseContext,</span>
+<span class="code-line">): AsyncGenerator&lt;MessageUpdate, void&gt; {</span>
+<span class="code-line">  let currentContext = toolUseContext</span>
+<span class="code-line">  for (const { isConcurrencySafe, blocks } of partitionToolCalls(...)) {</span>
+<span class="code-line">    if (isConcurrencySafe) {</span>
+<span class="code-line">      // Run read-only batch concurrently</span>
+<span class="code-line">      for await (const update of runToolsConcurrently(...)) {</span>
+<span class="code-line">        yield { message: update.message, newContext: currentContext }</span>
+<span class="code-line">      }</span>
+<span class="code-line">    } else {</span>
+<span class="code-line">      // Run non-read-only batch serially</span>
+<span class="code-line">      for await (const update of runToolsSerially(...)) {</span>
+<span class="code-line">        yield { message: update.message, newContext: currentContext }</span>
+<span class="code-line">      }</span>
+<span class="code-line">    }</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">工具不会一股脑乱跑，系统会先按风险和语义把调用分批。</p>
+            <p class="tl">只读工具可以并发，因为顺序通常不重要；改文件、跑命令这类动作则必须串行。</p>
+            <p class="tl">这就是为什么“同时读 5 个文件”通常很快，而“连续改 5 个文件”不会被强行并发。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">上下文快满时，系统会主动压缩</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/compact/autoCompact.ts`（第 62-76 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const AUTOCOMPACT_BUFFER_TOKENS = 13_000</span>
+<span class="code-line">export const WARNING_THRESHOLD_BUFFER_TOKENS = 20_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function getAutoCompactThreshold(model: string): number {</span>
+<span class="code-line">  const effectiveContextWindow = getEffectiveContextWindowSize(model)</span>
+<span class="code-line">  const autocompactThreshold =</span>
+<span class="code-line">    effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS</span>
+<span class="code-line">  return autocompactThreshold</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">长会话不会无限膨胀到把上下文窗口顶爆。</p>
+            <p class="tl">系统会在逼近阈值时主动 compact，把旧历史压缩成摘要，给后续回合腾空间。</p>
+            <p class="tl">所以“模型像是还记得前文”本质上往往是“它重新读了保留下来的压缩历史”。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧠</div>
+        <div class="callout-content">
+          <strong class="callout-title">模型不是在“记住”，而是在反复重读</strong>
+          <p>每一轮都要重新带上当前上下文，所以长对话的成本和稳定性问题，本质上都和上下文管理有关。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">把一个回合走一遍</h2>
+      <div class="flow-animation animate-in" data-initial-label="点击“下一步”开始" data-steps='[
+        {"highlight":"flow-actor-1","label":"用户发出一个修 bug 请求"},
+        {"highlight":"flow-actor-2","label":"QueryEngine 组装完整上下文","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"模型输出文本或 tool_use 请求","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"工具执行并把结果回写为 tool_result","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"下一轮模型基于新增结果继续决策，直到 end_turn 或预算耗尽","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">用</div><span>用户</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">循</div><span>QueryEngine</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">模</div><span>模型</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">工</div><span>工具</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">回</div><span>下一轮</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">点击“下一步”开始</div>
+        <div class="flow-controls">
+          <button class="btn flow-next-btn">下一步</button>
+          <button class="btn flow-reset-btn">重来</button>
+          <span class="flow-progress"></span>
+        </div>
+      </div>
+
+      <div class="quiz-container animate-in" id="quiz-module3-zh" style="margin-top: var(--space-8);">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。工具调度的关键不是“全并发”或“全串行”，而是按安全性分批：只读并发，变更串行。" data-explanation-wrong="这里最关键的工程判断是：读操作可以并发，写和执行类操作要串行。">
+          <h3 class="quiz-question">如果模型一次性请求了多项工具，系统最合理的执行策略是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>无论什么工具都全部并发</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按安全性分批：只读并发，修改类串行</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>无论什么工具都全部串行</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。代理反复调用同一工具，优先怀疑回合循环里的反馈链或停止条件，而不是先怪 UI。" data-explanation-wrong="这种“同一工具不停重复”通常发生在循环衔接层：tool_result 没被正确利用，或者 stop condition 没生效。">
+          <h3 class="quiz-question">如果代理不停重复调用同一个工具，第一怀疑点应该是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>QueryEngine 与 tool_result 之间的反馈链或停止条件出了问题</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主题样式渲染有问题</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>CLI 的版本号快路径写错了</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。`maxTurns` 控制的是一次请求内部允许发生多少轮模型/工具往返。" data-explanation-wrong="它不是限制仓库大小，也不是限制工具数量，而是限制一个回合内部的迭代深度。">
+          <h3 class="quiz-question">`maxTurns` 在这个系统里真正约束的是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>一个仓库最多能改多少个文件</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>工具池里最多能暴露多少个工具</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>一次回合内部最多允许多少轮模型与工具往返</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

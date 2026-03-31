@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CCStudy - Inside Cloud Code</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    :root {
+      --nav-height: 64px;
+      --color-accent:       #A54A2A;
+      --color-accent-hover: #8E3F23;
+      --color-accent-light: #F8E7DF;
+      --color-accent-muted: #CC7D5B;
+    }
+  </style>
+
+  <script src="main.js" defer></script>
+</head>
+<body data-mode="story">
+  <button class="rail-scrim" id="rail-scrim" type="button" aria-label="Close contents"></button>
+
+  <nav class="nav" id="nav">
+    <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="nav-inner">
+      <a class="brand-pill" href="#hero-dossier">
+        <span class="brand-dot"></span>
+        <span class="brand-label">CCStudy Dossier</span>
+      </a>
+
+      <div class="nav-dots" id="nav-dots" role="tablist" aria-label="Module navigation"></div>
+
+      <div class="nav-actions" aria-label="Reading controls">
+        <div class="mode-switch" role="group" aria-label="Reading mode">
+          <button class="mode-btn active" data-mode="story" type="button">Story</button>
+          <button class="mode-btn" data-mode="audit" type="button">Audit</button>
+        </div>
+        <a class="repo-link" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
+        <button class="contents-btn" id="contents-btn" type="button" aria-controls="chapter-rail" aria-expanded="false">Contents</button>
+        <div class="lang-switches" aria-label="Language switcher">
+          <a class="lang-switch active" href="./index.html" aria-current="page">EN</a>
+          <a class="lang-switch" href="./zh/index.html">中文</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <aside class="chapter-rail" id="chapter-rail" aria-label="Module contents">
+    <div class="chapter-rail-head">
+      <strong>Audit Index</strong>
+      <button class="contents-btn close" id="contents-close" type="button">Close</button>
+    </div>
+    <ol class="chapter-list" id="chapter-list"></ol>
+  </aside>
+
+  <main id="main">
+    <section class="hero-dossier" id="hero-dossier">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="hero-kicker">Reverse-engineered product notebook</p>
+          <h1 class="hero-title">Inside Cloud Code</h1>
+          <p class="hero-subtitle">A technical dossier for understanding the runtime path, actor boundaries, tool orchestration, and trust model of a terminal-native coding agent.</p>
+          <div class="hero-tags">
+            <span class="hero-tag">Static course</span>
+            <span class="hero-tag">Bilingual</span>
+            <span class="hero-tag">Auditable snippets</span>
+          </div>
+          <div class="hero-ctas">
+            <a class="hero-cta primary" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">Open Repository</a>
+            <button class="hero-cta" id="hero-open-viewer" type="button" data-open-file="source/claude-code-source/src/entrypoints/cli.tsx">Preview Source</button>
+          </div>
+        </div>
+        <div class="hero-metrics" id="hero-metrics">
+          <article class="metric-card">
+            <span class="metric-label">Modules</span>
+            <strong class="metric-value" id="metric-modules">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Quizzes</span>
+            <strong class="metric-value" id="metric-quizzes">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Code Blocks</span>
+            <strong class="metric-value" id="metric-snippets">-</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Glossary Terms</span>
+            <strong class="metric-value" id="metric-terms">-</strong>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="code-viewer-shell" id="code-viewer-shell" aria-hidden="true">
+      <div class="code-viewer-backdrop" id="code-viewer-backdrop"></div>
+      <div class="code-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="code-viewer-path">
+        <div class="code-viewer-head">
+          <div>
+            <p class="code-viewer-kicker">Source Viewer</p>
+            <h2 class="code-viewer-path" id="code-viewer-path">-</h2>
+          </div>
+          <div class="code-viewer-actions">
+            <a class="code-viewer-link" id="code-viewer-github" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">Open on GitHub</a>
+            <button class="code-viewer-close" id="code-viewer-close" type="button" aria-label="Close source viewer">Close</button>
+          </div>
+        </div>
+        <div class="code-viewer-status" id="code-viewer-status">Select a file reference to load source.</div>
+        <div class="code-viewer-body">
+          <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+        </div>
+      </div>
+    </section>
+<section class="module" id="module-1">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">From Prompt to Action</h1>
+      <p class="module-subtitle">Startup is staged on purpose. Cheap requests pay almost zero cost, and heavy systems only wake up when needed.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">The Millisecond After You Press Enter</h2>
+      <p class="animate-in">When you run <span class="term" data-definition="CLI means Command Line Interface: you control the program by typing commands in a terminal.">`claude`</span>, the process starts by reading `process.argv`. It does not load the whole agent first. It asks one routing question: is this a tiny fast-path request or a full interactive session?</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Read args</strong><p>Parse command-line input and classify intent.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Branch early</strong><p>Short commands return immediately with no heavy imports.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Profile real startup</strong><p>Only non-trivial flows turn on startup checkpoints.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Fast Path: Zero Heavy Imports for Version</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/cli.tsx` (lines 34-48)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const args = process.argv.slice(2);</span>
+<span class="code-line"></span>
+<span class="code-line">// Fast-path for --version/-v: zero module loading needed</span>
+<span class="code-line">if (args.length === 1 &amp;&amp; (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {</span>
+<span class="code-line">  // MACRO.VERSION is inlined at build time</span>
+<span class="code-line">  console.log(`${MACRO.VERSION} (Claude Code)`);</span>
+<span class="code-line">  return;</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const {</span>
+<span class="code-line">  profileCheckpoint</span>
+<span class="code-line">} = await import('../utils/startupProfiler.js');</span>
+<span class="code-line">profileCheckpoint('cli_entry');</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Grab command-line args first.</p>
+            <p class="tl">If request is only version, print and exit immediately.</p>
+            <p class="tl">No heavy startup modules are loaded for that path.</p>
+            <p class="tl">Only real sessions import the startup profiler.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">Compile-time constant, runtime savings</strong>
+          <p><span class="term" data-definition="Compile-time means value substitution happens during build, before the app runs.">`MACRO.VERSION`</span> is injected at build time, so version reads are effectively free at runtime.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Startup Profiler Defines Named Phases</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/startupProfiler.ts` (lines 50-54)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">import_time: ['cli_entry', 'main_tsx_imports_loaded'],</span>
+<span class="code-line">init_time: ['init_function_start', 'init_function_end'],</span>
+<span class="code-line">settings_time: ['eagerLoadSettings_start', 'eagerLoadSettings_end'],</span>
+<span class="code-line">total_time: ['cli_entry', 'main_after_run'],</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Startup is measured in named windows, not vague “slow” feelings.</p>
+            <p class="tl">Each phase is a pair of checkpoints.</p>
+            <p class="tl">That gives you blame precision when startup regresses.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Staged Chain: What Loads When</h2>
+      <div class="flow-animation animate-in" data-initial-label="Click &quot;Next Step&quot; to begin" data-steps='[
+        {"highlight":"flow-actor-1","label":"User runs claude"},
+        {"highlight":"flow-actor-2","label":"cli.tsx reads args and checks fast path","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"Profiler starts for real startup","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"main.tsx bootstraps tools, permissions, and commands","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"REPL launches after setup and command loading","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">U</div><span>User</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">C</div><span>CLI</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">P</div><span>Profiler</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">M</div><span>main.tsx</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">R</div><span>REPL</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">Click "Next Step" to begin</div>
+        <div class="flow-controls">
+          <button class="btn flow-next-btn">Next Step</button>
+          <button class="btn flow-reset-btn">Restart</button>
+          <span class="flow-progress"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module1">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Version path returns before heavy startup import cost." data-explanation-wrong="Version is handled as a fast path with immediate return.">
+          <h3 class="quiz-question">What is the primary reason `claude --version` feels instant?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It launches REPL with fewer components</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It returns before full startup imports</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It skips argument parsing entirely</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Named checkpoints convert latency into debuggable phase data." data-explanation-wrong="The profiler exists to identify where startup time is spent by phase.">
+          <h3 class="quiz-question">Why does `profileCheckpoint('cli_entry')` matter?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It anchors phase timing for startup diagnostics</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It enables syntax highlighting in REPL</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It authorizes all tools in advance</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Startup slowness should be diagnosed by phase, not by generic intuition." data-explanation-wrong="Use profiler phases (import/init/settings/total) before proposing fixes.">
+          <h3 class="quiz-question">You need to ask an AI agent to optimize startup. Best phrasing?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“Make everything faster somehow.”</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“Rewrite main.tsx from scratch.”</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>“`import_time` regressed; optimize early import path.”</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-2">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">Meet the Cast</h1>
+      <p class="module-subtitle">The product feels like one assistant. Under the hood, it is a baton pass across specialized actors.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Responsibility Map, Not Blob Architecture</h2>
+      <p class="animate-in">Use a cast mental model: <span class="term" data-definition="Entrypoint is the first file that receives process control and routes execution.">entrypoint</span> routes, bootstrap initializes, REPL renders, QueryEngine orchestrates turns, tools execute concrete actions.</p>
+      <div class="arch-diagram animate-in">
+        <div class="arch-zone"><h4 class="arch-zone-label">Routing</h4><div class="arch-component" data-desc="Reads args and selects startup path."><div class="arch-icon">🚪</div><span>cli.tsx</span></div></div>
+        <div class="arch-zone"><h4 class="arch-zone-label">Bootstrap</h4><div class="arch-component" data-desc="Builds tool pool, permissions, commands, state."><div class="arch-icon">🧰</div><span>main.tsx</span></div></div>
+        <div class="arch-zone"><h4 class="arch-zone-label">Interaction</h4><div class="arch-component" data-desc="Wraps app shell and interactive loop."><div class="arch-icon">🖥️</div><span>App + REPL</span></div></div>
+        <div class="arch-zone"><h4 class="arch-zone-label">Execution</h4><div class="arch-component" data-desc="Runs turn loop and tool orchestration."><div class="arch-icon">🔁</div><span>QueryEngine + Tools</span></div></div>
+        <div class="arch-description">Click each actor to inspect ownership.</div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Display Layer Loads on Demand</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/replLauncher.tsx` (lines 12-21)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export async function launchRepl(...): Promise&lt;void&gt; {</span>
+<span class="code-line">  const { App } = await import('./components/App.js');</span>
+<span class="code-line">  const { REPL } = await import('./screens/REPL.js');</span>
+<span class="code-line">  await renderAndRun(root, &lt;App {...appProps}&gt;&lt;REPL {...replProps} /&gt;&lt;/App&gt;);</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">UI shell and REPL are lazy-loaded only for interactive path.</p>
+          <p class="tl">REPL lives inside App wrapper to inherit session-wide context.</p>
+          <p class="tl">Clear ownership boundary: shell concerns vs turn-loop concerns.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Toolbelt Is a Specialist Directory</h2>
+      <div class="file-tree animate-in">
+        <div class="ft-folder open"><span class="ft-name">source/claude-code-source/src/tools/</span><span class="ft-desc">Specialized capabilities</span><div class="ft-children">
+          <div class="ft-folder"><span class="ft-name">BashTool/</span><span class="ft-desc">Run shell commands</span></div>
+          <div class="ft-folder"><span class="ft-name">FileReadTool/</span><span class="ft-desc">Read local files</span></div>
+          <div class="ft-folder"><span class="ft-name">FileEditTool/</span><span class="ft-desc">Patch files safely</span></div>
+          <div class="ft-folder"><span class="ft-name">MCPTool/</span><span class="ft-desc">Call remote MCP servers</span></div>
+          <div class="ft-folder"><span class="ft-name">WebFetchTool/</span><span class="ft-desc">Fetch web content</span></div>
+        </div></div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content"><strong class="callout-title">Separation of concerns is operational leverage</strong><p>When ownership is explicit, requests to AI can be explicit: “change QueryEngine behavior, do not touch REPL rendering.”</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Architecture as Group Chat</h2>
+      <div class="chat-window animate-in" id="chat-module2">
+        <div class="chat-messages">
+          <div class="chat-message" data-msg="0" data-sender="a" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-1)">C</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-1)">cli.tsx</span><p>Prompt received. Routing to interactive startup.</p></div></div>
+          <div class="chat-message" data-msg="1" data-sender="b" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-2)">M</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-2)">main.tsx</span><p>I will initialize tools, permissions, commands, and state.</p></div></div>
+          <div class="chat-message" data-msg="2" data-sender="c" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-3)">R</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-3)">REPL</span><p>UI is live. User input will stream into QueryEngine.</p></div></div>
+          <div class="chat-message" data-msg="3" data-sender="d" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-4)">Q</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-4)">QueryEngine</span><p>Running turn loop. Calling tools as needed.</p></div></div>
+          <div class="chat-message" data-msg="4" data-sender="e" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-5)">T</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-5)">Tool</span><p>Executed action, returning result to the loop.</p></div></div>
+        </div>
+        <div class="chat-typing" id="chat-module2-typing" style="display:none">
+          <div class="chat-avatar" id="chat-module2-typing-avatar">?</div><div class="chat-typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>
+        </div>
+        <div class="chat-controls"><button class="btn chat-next-btn">Next Message</button><button class="btn chat-all-btn">Play All</button><button class="btn chat-reset-btn">Replay</button><span class="chat-progress"></span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module2">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Correct. Model requests tool use; the system executes it through tool implementations." data-explanation-wrong="Tool execution belongs to tool layer orchestrated by QueryEngine, not model internals.">
+          <h3 class="quiz-question">If the agent needs to read a file, who performs the actual read?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL screen component</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>System prompt parser</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>FileReadTool via QueryEngine orchestration</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Model-turn behavior and orchestration logic live around QueryEngine path." data-explanation-wrong="UI rendering is not the right ownership for model-call strategy changes.">
+          <h3 class="quiz-question">You need to change turn orchestration behavior. Best initial location?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/QueryEngine.ts`</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/replLauncher.tsx`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/tools.ts`</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Yes. Wrapper separation gives shared context while preserving screen-level focus." data-explanation-wrong="App and REPL split solves ownership, composability, and context layering.">
+          <h3 class="quiz-question">Why keep `App` and `REPL` as separate components?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To avoid dynamic import syntax</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To separate global shell concerns from interaction-loop concerns</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because React forbids single-component screens</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module2')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module2')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-3">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">The Conversation Loop</h1>
+      <p class="module-subtitle">One user turn can include multiple model round-trips, tool calls, and context updates before completion.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">One Turn, Many Exchanges</h2>
+      <p class="animate-in">The interaction model is iterative: user request, model output, tool request, tool result, model refinement, repeat. It ends on explicit stop conditions or budget limits.</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Build context</strong><p>History + system prompt + user/system context + tool permission gate.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Model emits message</strong><p>Text response or structured `tool_use` request.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Execute tools</strong><p>Read-only operations can batch concurrently; mutating operations stay serial.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Append result and continue</strong><p>Tool output returns as message input for next model round.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Turn Handoff into `query()`</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts` (lines 675-686)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">for await (const message of query({</span>
+<span class="code-line">  messages,</span>
+<span class="code-line">  systemPrompt,</span>
+<span class="code-line">  userContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">  canUseTool: wrappedCanUseTool,</span>
+<span class="code-line">  toolUseContext: processUserInputContext,</span>
+<span class="code-line">  fallbackModel,</span>
+<span class="code-line">  querySource: 'sdk',</span>
+<span class="code-line">  maxTurns,</span>
+<span class="code-line">  taskBudget,</span>
+<span class="code-line">})) {</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">`query()` receives complete turn state and policy constraints.</p>
+          <p class="tl">The async loop consumes messages as they stream back.</p>
+          <p class="tl">Tool permissions are injected directly into loop execution path.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Concurrency Strategy for Tool Calls</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/tools/toolOrchestration.ts` (lines 8-12, 26-36, 64-67)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">function getMaxToolUseConcurrency(): number {</span>
+<span class="code-line">  return (parseInt(process.env.CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY || '', 10) || 10)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">for (const { isConcurrencySafe, blocks } of partitionToolCalls(...)) {</span>
+<span class="code-line">  if (isConcurrencySafe) {</span>
+<span class="code-line">    // Run read-only batch concurrently</span>
+<span class="code-line">    for await (const update of runToolsConcurrently(blocks, ...)) { ... }</span>
+<span class="code-line">  } else {</span>
+<span class="code-line">    // Run non-read-only batch serially</span>
+<span class="code-line">    for await (const update of runToolsSerially(blocks, ...)) { ... }</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Concurrency defaults to 10 for safe read-only tool batches.</p>
+          <p class="tl">Partitioning is policy-aware: concurrency-safe vs order-sensitive operations.</p>
+          <p class="tl">Writes stay serial to preserve deterministic side-effect order.</p>
+        </div></div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content"><strong class="callout-title">Tool calls are messages, not direct function privilege</strong><p>The model proposes tool calls. The runtime validates, executes, and feeds results back into the next model round.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Auto-Compact Prevents Context Collapse</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/compact/autoCompact.ts` (lines 62-70, 72-77)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export const AUTOCOMPACT_BUFFER_TOKENS = 13_000</span>
+<span class="code-line">const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3</span>
+<span class="code-line"></span>
+<span class="code-line">export function getAutoCompactThreshold(model: string): number {</span>
+<span class="code-line">  const effectiveContextWindow = getEffectiveContextWindowSize(model)</span>
+<span class="code-line">  const autocompactThreshold = effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS</span>
+<span class="code-line">  return autocompactThreshold</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Compaction starts before the context window is exhausted.</p>
+          <p class="tl">Buffer is explicit: 13k tokens.</p>
+          <p class="tl">A failure circuit breaker stops repeated futile compaction attempts.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module3">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Read-only batches can run concurrently while mutating batches remain serial." data-explanation-wrong="The runtime explicitly partitions safe concurrent tool calls from serial ones.">
+          <h3 class="quiz-question">Model requests `FileRead` and `Bash` in one response. What is the key orchestration rule?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always run all requested tools concurrently</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Partition by safety: read-only concurrent, mutating serial</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always run all requested tools serially</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Looping often reflects tool-result feedback problems or stop-condition issues in turn loop." data-explanation-wrong="Infinite loops are rarely UI bugs; inspect QueryEngine loop, tool results, and stop conditions.">
+          <h3 class="quiz-question">Agent keeps calling the same tool repeatedly. Best first diagnosis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Turn-loop feedback/stop condition issue around QueryEngine-tool-result cycle</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme rendering issue in REPL</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>CLI version fast-path misrouting</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. `maxTurns` is a turn-level safety budget to prevent unbounded loops." data-explanation-wrong="`maxTurns` caps iterative progression of one request.">
+          <h3 class="quiz-question">What does `maxTurns` control in practice?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Maximum files editable per repository</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Maximum tools available in tool pool</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Maximum iterative model/tool rounds for a turn</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-4">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">Tools and the Outside World</h1>
+      <p class="module-subtitle">The model decides. Tools act. External systems fail independently, so diagnosis must happen at the connector boundary.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Tool Taxonomy</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)"><div class="pattern-icon" style="background: var(--color-actor-1)">📁</div><h4 class="pattern-title">Filesystem</h4><p class="pattern-desc">Read/Edit/Write/Glob/Grep on local repository files.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)"><div class="pattern-icon" style="background: var(--color-actor-2)">🧪</div><h4 class="pattern-title">Execution</h4><p class="pattern-desc">Bash/PowerShell for runnable diagnostics and commands.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)"><div class="pattern-icon" style="background: var(--color-actor-3)">🌐</div><h4 class="pattern-title">Web</h4><p class="pattern-desc">Fetch/Search for live external context.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)"><div class="pattern-icon" style="background: var(--color-actor-4)">🧩</div><h4 class="pattern-title">MCP Connectors</h4><p class="pattern-desc">Remote tool/resource interface through MCP protocol.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">MCP Session Expiry Detection</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts` (lines 193-205)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export function isMcpSessionExpiredError(error: Error): boolean {</span>
+<span class="code-line">  const httpStatus = 'code' in error ? (error as Error &amp; { code?: number }).code : undefined</span>
+<span class="code-line">  if (httpStatus !== 404) return false</span>
+<span class="code-line">  return (</span>
+<span class="code-line">    error.message.includes('"code":-32001') ||</span>
+<span class="code-line">    error.message.includes('"code": -32001')</span>
+<span class="code-line">  )</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">A plain 404 is ambiguous.</p>
+          <p class="tl">The runtime checks JSON-RPC code `-32001` to classify session-expired state.</p>
+          <p class="tl">Correct classification enables reconnect/retry logic instead of wrong failure handling.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Context Protection in Connector Metadata</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts` (~215-220)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">/**</span>
+<span class="code-line"> * Cap on MCP tool descriptions and server instructions sent to the model.</span>
+<span class="code-line"> * ... observed dumping 15-60KB ...</span>
+<span class="code-line"> */</span>
+<span class="code-line">const MAX_MCP_DESCRIPTION_LENGTH = 2048</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Connector metadata can explode token usage.</p>
+          <p class="tl">Description capping keeps MCP integrations from silently consuming context budget.</p>
+          <p class="tl">This is a reliability and cost control move, not just formatting.</p>
+        </div></div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">MAX_MCP_DESCRIPTION_LENGTH</code><span class="badge-desc">2048 chars cap for tool/server descriptions</span></div>
+        <div class="badge-item"><code class="badge-code">MCP_TOOL_TIMEOUT</code><span class="badge-desc">Configurable tool-call timeout window</span></div>
+        <div class="badge-item"><code class="badge-code">McpAuthError</code><span class="badge-desc">Explicit auth failure type for recovery flow</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Tool Call as Message Exchange</h2>
+      <div class="flow-animation animate-in" data-initial-label="Click &quot;Next Step&quot; to begin" data-steps='[
+        {"highlight":"flow-actor-1","label":"Model emits a tool_use request"},
+        {"highlight":"flow-actor-2","label":"QueryEngine validates permission gates","packet":true,"from":"actor-1","to":"actor-2"},
+        {"highlight":"flow-actor-3","label":"Tool/connector executes against target system","packet":true,"from":"actor-2","to":"actor-3"},
+        {"highlight":"flow-actor-4","label":"Result is normalized to tool_result message","packet":true,"from":"actor-3","to":"actor-4"},
+        {"highlight":"flow-actor-5","label":"Next model round consumes returned result","packet":true,"from":"actor-4","to":"actor-5"}
+      ]'>
+        <div class="flow-actors">
+          <div class="flow-actor" id="flow-actor-1"><div class="flow-actor-icon">M</div><span>Model</span></div>
+          <div class="flow-actor" id="flow-actor-2"><div class="flow-actor-icon">Q</div><span>QueryEngine</span></div>
+          <div class="flow-actor" id="flow-actor-3"><div class="flow-actor-icon">T</div><span>Tool/MCP</span></div>
+          <div class="flow-actor" id="flow-actor-4"><div class="flow-actor-icon">R</div><span>tool_result</span></div>
+          <div class="flow-actor" id="flow-actor-5"><div class="flow-actor-icon">N</div><span>Next round</span></div>
+        </div>
+        <div class="flow-packet" id="flow-packet"></div>
+        <div class="flow-step-label" id="flow-label">Click "Next Step" to begin</div>
+        <div class="flow-controls"><button class="btn flow-next-btn">Next Step</button><button class="btn flow-reset-btn">Restart</button><span class="flow-progress"></span></div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content"><strong class="callout-title">“Model is broken” is often the wrong diagnosis</strong><p>If tool execution or connector session state fails, root cause is usually outside model inference itself.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module4">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Correct. Session-expired classification points to connector lifecycle, not model cognition." data-explanation-wrong="404 + JSON-RPC code -32001 is a connector session diagnosis.">
+          <h3 class="quiz-question">An MCP call returns session-expired. Best first diagnosis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL rendering bug</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Model forgot prompt rules</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Connector/session lifecycle failure requiring reconnect/retry</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Tool layer is the runtime action boundary." data-explanation-wrong="Tools are the execution hands of the system, not optional wrappers.">
+          <h3 class="quiz-question">Why is tool architecture central in agent systems?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It bridges model decisions to real-world actions and data access</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It replaces system prompts entirely</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It avoids permission requirements</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Yes. Structured MCP resources reduce scraping ambiguity and improve reliability." data-explanation-wrong="Prefer structured protocol resources over ad-hoc scraping when available.">
+          <h3 class="quiz-question">You have both raw page scraping and MCP resource access. Preferred path?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always scrape raw HTML first</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Prefer MCP structured resource path first</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Move integration into UI layer</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-5">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">05</span>
+      <h1 class="module-title">Permissions and Trust</h1>
+      <p class="module-subtitle">High capability without explicit policy boundaries is risk. Permission design is a precision control layer, not UI ceremony.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Permission Modes Are Trust Profiles</h2>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">default</code><span class="badge-desc">Ask before sensitive operations</span></div>
+        <div class="badge-item"><code class="badge-code">acceptEdits</code><span class="badge-desc">Auto-accept edit-oriented operations</span></div>
+        <div class="badge-item"><code class="badge-code">bypassPermissions</code><span class="badge-desc">Broad auto-allow mode (high-risk)</span></div>
+        <div class="badge-item"><code class="badge-code">plan</code><span class="badge-desc">Planning mode with constrained execution behavior</span></div>
+      </div>
+      <p class="animate-in">Safe configuration means tight <span class="term" data-definition="Rule scope means how broad a rule’s match pattern is. Tight scope approves less behavior.">rule scope</span>: narrow allowlists first, broad patterns last.</p>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">What Counts as Dangerous Bash Rule</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissionSetup.ts` (lines 94-147)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export function isDangerousBashPermission(toolName: string, ruleContent: string | undefined): boolean {</span>
+<span class="code-line">  if (toolName !== BASH_TOOL_NAME) return false</span>
+<span class="code-line">  if (ruleContent === undefined || ruleContent === '') return true</span>
+<span class="code-line">  const content = ruleContent.trim().toLowerCase()</span>
+<span class="code-line">  if (content === '*') return true</span>
+<span class="code-line">  for (const pattern of DANGEROUS_BASH_PATTERNS) { ... }</span>
+<span class="code-line">  return false</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Blank rule content means effectively “allow everything.”</p>
+          <p class="tl">Wildcard `*` is treated as dangerous by definition.</p>
+          <p class="tl">Interpreter and broad execution patterns are blocked from silent auto-allow flows.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Dangerous Pattern Sources and Circuit Breaker</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/dangerousPatterns.ts` (lines 18-42, 44-53)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export const CROSS_PLATFORM_CODE_EXEC = [</span>
+<span class="code-line">  'python', 'node', 'deno', 'tsx', 'ruby', 'perl', 'php', 'lua',</span>
+<span class="code-line">  'npx', 'bunx', 'npm run', 'yarn run', 'pnpm run', 'bun run',</span>
+<span class="code-line">  'bash', 'sh', 'ssh',</span>
+<span class="code-line">] as const</span>
+<span class="code-line"></span>
+<span class="code-line">export const DANGEROUS_BASH_PATTERNS: readonly string[] = [</span>
+<span class="code-line">  ...CROSS_PLATFORM_CODE_EXEC, 'zsh', 'fish', 'eval', 'exec', 'env', 'xargs', 'sudo',</span>
+<span class="code-line">]</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">These patterns represent broad code execution vectors.</p>
+          <p class="tl">Auto mode strips over-broad allows that would bypass classifier safety intent.</p>
+          <p class="tl">This is layered defense, not trust-by-default.</p>
+        </div></div>
+      </div>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/autoModeState.ts` (lines 27-33)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export function setAutoModeCircuitBroken(broken: boolean): void {</span>
+<span class="code-line">  autoModeCircuitBroken = broken</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function isAutoModeCircuitBroken(): boolean {</span>
+<span class="code-line">  return autoModeCircuitBroken</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Auto mode has a circuit-breaker state to prevent unsafe silent re-entry.</p>
+          <p class="tl">Once tripped, higher-level logic can enforce explicit recovery path.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Permission Decision Path</h2>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Tool request arrives</strong><p>Model emits structured request with tool name and arguments.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Rule matching runs</strong><p>Exact, prefix, wildcard shapes are evaluated against policy sets.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Dangerous broad allows stripped</strong><p>Auto mode removes unsafe blanket approvals.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Allow / ask / deny</strong><p>Execution proceeds only after policy resolution.</p></div></div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content"><strong class="callout-title">Broad permission is often implicit arbitrary code execution</strong><p>`Bash(*)` convenience can silently become unrestricted command authority.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module5">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. `Bash(*)` approximates unconstrained shell authority." data-explanation-wrong="The risk is broad implicit command approval, not syntax aesthetics.">
+          <h3 class="quiz-question">Why is `Bash(*)` high-risk in agent workflows?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Wildcard parsing is unstable in TypeScript</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It effectively pre-approves arbitrary shell execution</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It disables startup profiling</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Tight allowlists preserve utility while minimizing authority surface." data-explanation-wrong="Best practice is narrow, explicit command scope.">
+          <h3 class="quiz-question">Best configuration for safe auto-run of one trusted command?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Approve only that exact command pattern</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Approve all shell commands in one wildcard</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Disable permission checks globally</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Frequent prompts after policy changes often indicate rule stripping or mode-level guardrails." data-explanation-wrong="Inspect permission policy layer before blaming UI interaction code.">
+          <h3 class="quiz-question">Auto-run stopped and confirm prompts increased. Most likely first hypothesis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL animation regression</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme style token mismatch</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Rule classified as too broad and removed from auto-allow path</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-6">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">06</span>
+      <h1 class="module-title">Speed Tricks and Debugging</h1>
+      <p class="module-subtitle">Performance comes from orchestration: parallelize what is independent, defer what is optional, and preserve evidence for diagnosis.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Parallel Startup Is Intentional</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (~1919-1932)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {</span>
+<span class="code-line">  initBuiltinPlugins();</span>
+<span class="code-line">  initBundledSkills();</span>
+<span class="code-line">}</span>
+<span class="code-line">const setupPromise = setup(preSetupCwd, permissionMode, ...);</span>
+<span class="code-line">const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);</span>
+<span class="code-line">const agentDefsPromise = worktreeEnabled ? null : getAgentDefinitionsWithOverrides(preSetupCwd);</span>
+<span class="code-line">commandsPromise?.catch(() =&gt; {});</span>
+<span class="code-line">agentDefsPromise?.catch(() =&gt; {});</span>
+<span class="code-line">await setupPromise;</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Tiny in-memory setup is done first to avoid stale command snapshots.</p>
+          <p class="tl">Then independent startup tasks are fired in parallel.</p>
+          <p class="tl">This cuts wall-clock startup latency without changing behavior semantics.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Startup and Context Safeguards</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)"><div class="pattern-icon" style="background: var(--color-actor-1)">⏱️</div><h4 class="pattern-title">Startup Profiler</h4><p class="pattern-desc">Named phases (`import_time`, `init_time`, `settings_time`, `total_time`) allow targeted regressions diagnosis.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)"><div class="pattern-icon" style="background: var(--color-actor-2)">🧠</div><h4 class="pattern-title">Auto-Compact</h4><p class="pattern-desc">Context thresholding and failure circuit-breakers prevent runaway long-turn degradation.</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)"><div class="pattern-icon" style="background: var(--color-actor-3)">🧾</div><h4 class="pattern-title">File Checkpointing</h4><p class="pattern-desc">Edit snapshots are retained for rollback and forensic debugging.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">File Checkpointing Data Model</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/fileHistory.ts` (lines 39-43, 54, 63-70)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export type FileHistorySnapshot = {</span>
+<span class="code-line">  messageId: UUID</span>
+<span class="code-line">  trackedFileBackups: Record&lt;string, FileHistoryBackup&gt;</span>
+<span class="code-line">  timestamp: Date</span>
+<span class="code-line">}</span>
+<span class="code-line">const MAX_SNAPSHOTS = 100</span>
+<span class="code-line">export function fileHistoryEnabled(): boolean {</span>
+<span class="code-line">  return (getGlobalConfig().fileCheckpointingEnabled !== false &amp;&amp;</span>
+<span class="code-line">    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING))</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Snapshots are message-scoped and timestamped for traceability.</p>
+          <p class="tl">History depth is bounded (`MAX_SNAPSHOTS = 100`).</p>
+          <p class="tl">Checkpointing is configurable and can be disabled for special environments.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Debugging Playbook by Symptom</h2>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Startup feels slow</strong><p>Check startup phase metrics before touching business logic.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Turn latency spikes</strong><p>Inspect tool orchestration path: concurrency-safe partitioning vs serial waits.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Context forgetfulness</strong><p>Check auto-compact trigger thresholds and summary boundaries.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Bad edit fallout</strong><p>Use file-history snapshots to rewind by message scope.</p></div></div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content"><strong class="callout-title">Observability is product capability</strong><p>If a system records checkpoints, snapshots, and structured failures, debugging becomes search and classification, not guesswork.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module6">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Correct. Independent tasks should overlap when no data dependency exists." data-explanation-wrong="Parallel startup is explicit in main.tsx orchestration.">
+          <h3 class="quiz-question">What is the primary optimization pattern in startup orchestration?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Parallelize independent tasks and avoid unnecessary serialization</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Defer all initialization until first tool call</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Remove all startup checks for speed</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Exactly. Startup slowness maps first to entrypoint and main bootstrap path." data-explanation-wrong="Diagnose at startup routing/bootstrap layer before random downstream edits.">
+          <h3 class="quiz-question">Startup regressed after refactor. Best first file pair to inspect?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme palette + tooltip styles</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only QueryEngine loop internals</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/entrypoints/cli.tsx` and `source/claude-code-source/src/main.tsx`</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Yes. Good debugging starts with ownership mapping, not random file hopping." data-explanation-wrong="Map symptom to ownership boundary before implementing fixes.">
+          <h3 class="quiz-question">Core debugging skill this course trains?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Memorize every import path</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Map symptom to owning layer, then inspect boundary evidence</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always rewrite modules from scratch</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-7">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">07</span>
+      <h1 class="module-title">Context Engineering</h1>
+      <p class="module-subtitle">Claude Code does not rely on one clever prompt. It assembles a runtime context stack: system prompt sections, tools, repo rules, memory files, and compaction boundaries.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Prompting is only the visible tip</h2>
+      <p class="animate-in">The model is never handed a naked user message. By the time one turn begins, Claude Code has already layered in a <span class="term" data-definition="System prompt means the hidden instruction block that defines the agent’s behavior, constraints, and available capabilities.">system prompt</span>, tool schemas, project instructions, memory files, and the surviving conversation history. That assembly process is what people now call <span class="term" data-definition="Context engineering is the design work of deciding what information the model sees, in what order, and with what priority.">context engineering</span>.</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">📘</div>
+          <h4 class="pattern-title">System prompt</h4>
+          <p class="pattern-desc">Standing instructions, tool affordances, safety expectations, and runtime role framing.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🗂️</div>
+          <h4 class="pattern-title">Repo rules</h4>
+          <p class="pattern-desc">`CLAUDE.md`, `.claude/CLAUDE.md`, and rules files carry project-local instructions that shape behavior per workspace.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🧠</div>
+          <h4 class="pattern-title">Memory + history</h4>
+          <p class="pattern-desc">User memory, session memory, and compacted transcripts decide what the model “still knows” on the next round trip.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">Most “the prompt is bad” complaints are actually context-shaping bugs</strong>
+          <p>If the agent ignores a repo rule or forgets a convention, the failure often sits upstream: wrong files were loaded, loaded in the wrong order, or compacted away too aggressively.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">The handoff where system context gets assembled</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts` (lines 284-300)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">headlessProfilerCheckpoint('before_getSystemPrompt')</span>
+<span class="code-line">const customPrompt =</span>
+<span class="code-line">  typeof customSystemPrompt === 'string' ? customSystemPrompt : undefined</span>
+<span class="code-line">const {</span>
+<span class="code-line">  defaultSystemPrompt,</span>
+<span class="code-line">  userContext: baseUserContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">} = await fetchSystemPromptParts({</span>
+<span class="code-line">  tools,</span>
+<span class="code-line">  mainLoopModel: initialMainLoopModel,</span>
+<span class="code-line">  additionalWorkingDirectories: Array.from(</span>
+<span class="code-line">    initialAppState.toolPermissionContext.additionalWorkingDirectories.keys(),</span>
+<span class="code-line">  ),</span>
+<span class="code-line">  mcpClients,</span>
+<span class="code-line">  customSystemPrompt: customPrompt,</span>
+<span class="code-line">})</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">The system prompt is fetched as a structured assembly step, not hardcoded inline at the call site.</p>
+            <p class="tl">Tool availability, model choice, extra working directories, MCP clients, and custom prompt overrides all influence what gets built.</p>
+            <p class="tl">By the time the model sees the request, the “prompt” is already the output of a small build pipeline.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">CLAUDE.md is a layered instruction system</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/claudemd.ts` (lines 1-16)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">/**</span>
+<span class="code-line"> * Files are loaded in the following order:</span>
+<span class="code-line"> *</span>
+<span class="code-line"> * 1. Managed memory (eg. /etc/claude-code/CLAUDE.md) - Global instructions for all users</span>
+<span class="code-line"> * 2. User memory (~/.claude/CLAUDE.md) - Private global instructions for all projects</span>
+<span class="code-line"> * 3. Project memory (CLAUDE.md, .claude/CLAUDE.md, and .claude/rules/*.md in project roots) - Instructions checked into the codebase</span>
+<span class="code-line"> * 4. Local memory (CLAUDE.local.md in project roots) - Private project-specific instructions</span>
+<span class="code-line"> *</span>
+<span class="code-line"> * Files are loaded in reverse order of priority, i.e. the latest files are highest priority</span>
+<span class="code-line"> * with the model paying more attention to them.</span>
+<span class="code-line"> */</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Repo instructions are not one file. They are a stack with explicit priority levels.</p>
+            <p class="tl">Managed and user memory define broader defaults; project and local files narrow behavior to the current workspace.</p>
+            <p class="tl">This is why “why did Claude behave differently here?” often reduces to “which CLAUDE.md layer won?”</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Global policy first</strong>
+            <p>Managed and user-level files establish the broadest defaults for all work.</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Project rules next</strong>
+            <p>`CLAUDE.md` and `.claude/rules/*.md` bind the agent to repo-specific conventions.</p>
+          </div>
+        </div>
+        <div class="step-card animate-in">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Nearest context wins</strong>
+            <p>Files closer to the active working directory are loaded later and therefore receive more attention.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Memory file discovery is cached on purpose</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/claudemd.ts` (lines 790-804, 886-900)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const getMemoryFiles = memoize(</span>
+<span class="code-line">  async (forceIncludeExternal: boolean = false): Promise&lt;MemoryFileInfo[]&gt; =&gt; {</span>
+<span class="code-line">    const result: MemoryFileInfo[] = []</span>
+<span class="code-line">    const processedPaths = new Set&lt;string&gt;()</span>
+<span class="code-line">    const config = getCurrentProjectConfig()</span>
+<span class="code-line">    const includeExternal =</span>
+<span class="code-line">      forceIncludeExternal ||</span>
+<span class="code-line">      config.hasClaudeMdExternalIncludesApproved ||</span>
+<span class="code-line">      false</span>
+<span class="code-line"></span>
+<span class="code-line">    // Process Managed file first (always loaded - policy settings)</span>
+<span class="code-line">    const managedClaudeMd = getMemoryPath('Managed')</span>
+<span class="code-line"></span>
+<span class="code-line">    if (isSettingSourceEnabled('projectSettings') &amp;&amp; !skipProject) {</span>
+<span class="code-line">      const projectPath = join(dir, 'CLAUDE.md')</span>
+<span class="code-line">      result.push(...(await processMemoryFile(projectPath, 'Project', processedPaths, includeExternal)))</span>
+<span class="code-line">      const dotClaudePath = join(dir, '.claude', 'CLAUDE.md')</span>
+<span class="code-line">      result.push(...(await processMemoryFile(dotClaudePath, 'Project', processedPaths, includeExternal)))</span>
+<span class="code-line">    }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">The runtime memoizes memory-file discovery because scanning rule files every turn would be wasteful.</p>
+            <p class="tl">It still preserves hierarchy: managed files, project `CLAUDE.md`, and `.claude/CLAUDE.md` all get discovered deliberately.</p>
+            <p class="tl">That means context engineering is both semantic and operational: the right files must be found, and found efficiently.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module7">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Exactly. If project conventions are being ignored, the first suspect is the context-loading path, not the wording of your user prompt." data-explanation-wrong="This symptom usually points upstream: repo instructions were not loaded, loaded at the wrong priority, or compacted away.">
+          <h3 class="quiz-question">The agent suddenly stops following a repo naming convention documented in `CLAUDE.md`. What is the best first diagnosis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The model became worse at TypeScript overnight</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The context stack or CLAUDE.md loading path is wrong</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The code viewer theme needs a different font</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Files nearer the working directory are loaded later and therefore get higher practical priority." data-explanation-wrong="The loader is hierarchical. Local and near-directory instruction files are designed to override broader defaults.">
+          <h3 class="quiz-question">In a monorepo, which instruction layer should win for a nested package?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The oldest global managed file always wins</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>User memory must override every project rule</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The nearer project-specific rule file should have the higher effective priority</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Right. Context engineering includes operational concerns like caching and memoization, not just semantic concerns like prompt wording." data-explanation-wrong="The memoization around memory-file discovery exists because context shaping has to stay fast enough for real usage, not just correct on paper.">
+          <h3 class="quiz-question">Why is `getMemoryFiles` memoized?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because repeated file discovery every turn would add needless overhead</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because memory files never change during a session</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Because memoization is required by TypeScript</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module7')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module7')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-8">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">08</span>
+      <h1 class="module-title">Extensions: MCP, Skills, Plugins</h1>
+      <p class="module-subtitle">Claude Code does not grow through one extension surface. It has three: protocol-level connectors, prompt-shaped skills, and installable plugins with lifecycle management.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Three extension surfaces, three different jobs</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🌐</div>
+          <h4 class="pattern-title">MCP</h4>
+          <p class="pattern-desc">Use this when you need the agent to talk to an external capability through a protocol: browser, database, remote system, IDE bridge.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧠</div>
+          <h4 class="pattern-title">Skills</h4>
+          <p class="pattern-desc">Use this when you want a reusable workflow or instruction bundle that shapes how the agent approaches a class of tasks.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📦</div>
+          <h4 class="pattern-title">Plugins</h4>
+          <p class="pattern-desc">Use this when you want packaged distribution, install/update/uninstall flows, marketplace surfacing, and explicit lifecycle management.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">These are not interchangeable abstractions</strong>
+          <p>A workflow prompt, a remote protocol connector, and an installable package solve different problems. Most bad extension designs start by choosing the wrong surface.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Bundled skills and plugins are registered before command loading</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (lines 1919-1928)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// Register bundled skills/plugins before kicking getCommands() — they're</span>
+<span class="code-line">// pure in-memory array pushes (&lt;1ms, zero I/O) that getBundledSkills()</span>
+<span class="code-line">// reads synchronously. Previously ran inside setup() after ~20ms of</span>
+<span class="code-line">// await points, so the parallel getCommands() memoized an empty list.</span>
+<span class="code-line">if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {</span>
+<span class="code-line">  initBuiltinPlugins();</span>
+<span class="code-line">  initBundledSkills();</span>
+<span class="code-line">}</span>
+<span class="code-line">const setupPromise = setup(preSetupCwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, sessionId ? validateUuid(sessionId) : undefined, worktreePRNumber, messagingSocketPath);</span>
+<span class="code-line">const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Extensions are part of startup topology, not a late afterthought.</p>
+            <p class="tl">Bundled skills and built-in plugins are registered before command loading so the command layer sees the right inventory immediately.</p>
+            <p class="tl">In other words: extension surfaces are first-class citizens in the boot sequence.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Skills are aggregated from multiple sources</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/commands.ts` (lines 359-385)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const [skillDirCommands, pluginSkills] = await Promise.all([</span>
+<span class="code-line">  getSkillDirCommands(cwd).catch(err =&gt; {</span>
+<span class="code-line">    logError(toError(err))</span>
+<span class="code-line">    logForDebugging('Skill directory commands failed to load, continuing without them')</span>
+<span class="code-line">    return []</span>
+<span class="code-line">  }),</span>
+<span class="code-line">  getPluginSkills().catch(err =&gt; {</span>
+<span class="code-line">    logError(toError(err))</span>
+<span class="code-line">    logForDebugging('Plugin skills failed to load, continuing without them')</span>
+<span class="code-line">    return []</span>
+<span class="code-line">  }),</span>
+<span class="code-line">])</span>
+<span class="code-line">const bundledSkills = getBundledSkills()</span>
+<span class="code-line">const builtinPluginSkills = getBuiltinPluginSkillCommands()</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">“Skills” do not come from one folder. The runtime merges skill-directory commands, plugin-provided skills, bundled skills, and built-in plugin skills.</p>
+            <p class="tl">It also treats failure defensively: one broken skill source should not take down the entire command surface.</p>
+            <p class="tl">This is extension-system design in practice: layered discovery plus graceful degradation.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Plugins are a full product surface, not a hidden hook</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (lines 4148-4172)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const pluginCmd = program.command('plugin').alias('plugins').description('Manage Claude Code plugins').configureHelp(createSortedHelpConfig());</span>
+<span class="code-line">pluginCmd.command('validate &lt;path&gt;').description('Validate a plugin or marketplace manifest')</span>
+<span class="code-line">pluginCmd.command('list').description('List installed plugins').option('--json', 'Output as JSON')</span>
+<span class="code-line">const marketplaceCmd = pluginCmd.command('marketplace').description('Manage Claude Code marketplaces').configureHelp(createSortedHelpConfig());</span>
+<span class="code-line">marketplaceCmd.command('add &lt;source&gt;').description('Add a marketplace from a URL, path, or GitHub repo')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Plugins are not just loadable code blobs. They come with explicit CLI management, validation, listing, marketplace handling, and install/update flows.</p>
+            <p class="tl">That means the extension surface is treated like a product with lifecycle rules, not just a hacky escape hatch.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">MCP</code>
+          <span class="badge-desc">Protocol-based capability hookup for external systems</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Skills</code>
+          <span class="badge-desc">Reusable task-shaping instructions and workflows</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Plugins</code>
+          <span class="badge-desc">Packaged, managed extension units with installation lifecycle</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module8">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Correct. If the job is connecting Claude Code to a remote capability through a protocol surface, MCP is the right first category." data-explanation-wrong="A protocol connector for remote tools belongs to MCP first, not to skills or plugin packaging by default.">
+          <h3 class="quiz-question">You want Claude Code to query a remote internal service through a structured protocol. What extension surface fits best?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Skill only</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme token</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Exactly. Skills are the better fit for repeatable workflows or instruction bundles that shape how the agent approaches work." data-explanation-wrong="If you are packaging a reusable workflow or prompt-driven operating procedure, the extension surface is closer to Skills than MCP or plugin lifecycle.">
+          <h3 class="quiz-question">You want a reusable “review this PR in our house style” workflow. What fits best?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP server first</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Skill</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Context compaction policy</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. Packaging, marketplace visibility, install/update/uninstall, and lifecycle management all point toward a plugin-shaped integration." data-explanation-wrong="If the requirement includes distribution and lifecycle management, plugin is the stronger abstraction.">
+          <h3 class="quiz-question">You want to ship an installable extension with validation and marketplace support. What should you reach for?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only a local skill file</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only an MCP endpoint</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Plugin</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module8')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module8')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p class="footer-title">CCStudy Editorial Build</p>
+        <p class="footer-note">This static dossier is designed for audit-first learning: trace behavior from user action to source-level implementation.</p>
+        <p class="footer-links">
+          <a class="footer-link" href="https://github.com/bagaking/ccstudy" target="_blank" rel="noopener noreferrer">https://github.com/bagaking/ccstudy</a>
+        </p>
+      </div>
+    </footer>
+  </main>
+
+</body>
+</html>

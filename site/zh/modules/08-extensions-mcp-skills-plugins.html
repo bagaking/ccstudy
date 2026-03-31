@@ -1,0 +1,148 @@
+<section class="module" id="module-8">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">08</span>
+      <h1 class="module-title">扩展体系：MCP、Skills、Plugins</h1>
+      <p class="module-subtitle">能力扩展不是一把锤子。MCP 解决外部系统接入，Skills 解决流程复用，Plugins 解决深层运行时扩展。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先分层：三种扩展机制解决三类问题</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)"><div class="pattern-icon" style="background: var(--color-actor-1)">🌐</div><h4 class="pattern-title">MCP</h4><p class="pattern-desc">通过协议把外部工具/资源接入代理，重点是连接与隔离边界。</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)"><div class="pattern-icon" style="background: var(--color-actor-2)">🧩</div><h4 class="pattern-title">Skills</h4><p class="pattern-desc">把重复工作流沉淀成可复用命令，重点是效率和一致性。</p></div>
+        <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)"><div class="pattern-icon" style="background: var(--color-actor-3)">🪝</div><h4 class="pattern-title">Plugins</h4><p class="pattern-desc">在运行时关键节点注入能力，重点是深度集成与治理。</p></div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content"><strong class="callout-title">默认优先低耦合层</strong><p>能用 Skills 解决就别先写 Plugin；能用 MCP 解决外部接入，就别把协议逻辑塞进 prompt。</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">MCP 命名空间保证能力身份不冲突</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/mcpStringUtils.ts`（第 35-52 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getMcpPrefix(serverName: string): string {</span>
+<span class="code-line">  return `mcp__${normalizeNameForMCP(serverName)}__`</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function buildMcpToolName(serverName: string, toolName: string): string {</span>
+<span class="code-line">  return `${getMcpPrefix(serverName)}${normalizeNameForMCP(toolName)}`</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">MCP 工具名采用 `mcp__server__tool` 规范，不和内置工具抢名字。</p>
+            <p class="tl">权限匹配因此可以精确到“哪个服务器上的哪个工具”。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">支持资源能力的 MCP 连接会自动注入读资源工具</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/mcp/client.ts`（第 2171-2193 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const supportsResources = !!client.capabilities?.resources</span>
+<span class="code-line">const resourceTools: Tool[] = []</span>
+<span class="code-line">if (supportsResources) {</span>
+<span class="code-line">  const hasResourceTools = [ListMcpResourcesTool, ReadMcpResourceTool].some(</span>
+<span class="code-line">    tool => tools.some(t => toolMatchesName(t, tool.name)),</span>
+<span class="code-line">  )</span>
+<span class="code-line">  if (!hasResourceTools) {</span>
+<span class="code-line">    resourceTools.push(ListMcpResourcesTool, ReadMcpResourceTool)</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">服务器声明有 resources 能力时，系统会补齐资源枚举/读取工具。</p>
+            <p class="tl">补齐过程是幂等的，不会重复注入。</p>
+          </div>
+        </div>
+      </div>
+      <p class="animate-in">同时，MCP 描述文本会做长度上限控制，防止连接器元数据吞掉上下文预算。</p>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Skills 走 Markdown 装载，但要按来源做安全分层</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/skills/loadSkillsDir.ts`（第 371-373、404-467 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// Security: MCP skills are remote and untrusted — never execute inline shell commands</span>
+<span class="code-line">if (loadedFrom !== 'mcp') {</span>
+<span class="code-line">  finalContent = await executeShellCommandsInPrompt(...)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const skillFilePath = join(skillDirPath, 'SKILL.md')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">本地 skills 可以按策略执行受控 shell 片段。</p>
+            <p class="tl">MCP 来源 skills 被视为远程不可信内容，禁用内联 shell 执行路径。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content"><strong class="callout-title">“可读”不等于“可执行”</strong><p>远程扩展内容可以参与推理，但执行权必须单独授权，不能隐式继承。</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Plugins 负责更深层的运行时扩展面</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/types/plugin.ts` 与 `src/entrypoints/sdk/coreTypes.ts`</p>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">组件面</code><span class="badge-desc">`commands`、`agents`、`skills`、`hooks`、`output-styles`，以及可选 MCP/LSP 服务器</span></div>
+        <div class="badge-item"><code class="badge-code">钩子事件</code><span class="badge-desc">`PreToolUse`、`PostToolUse`、`UserPromptSubmit`、`SessionStart`、`PostCompact` 等</span></div>
+        <div class="badge-item"><code class="badge-code">治理面</code><span class="badge-desc">启停状态、安装来源、错误类型化与加载检查</span></div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>要连外部系统</strong><p>优先 MCP。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>要复用人类工作流</strong><p>优先 Skills。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>要改运行时行为</strong><p>才用 Plugins。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module8-zh">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。数据库这类外部能力接入属于 MCP 的典型场景。" data-explanation-wrong="这类需求核心是“协议化外部接入”，不是单纯把提示词写长。">
+          <h3 class="quiz-question">你要让代理稳定访问内部数据库服务，首选哪一层扩展？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP 服务器接入</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只写一个本地 Skill</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先重写启动 profiler</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。命名空间的价值在身份隔离与权限精确匹配。" data-explanation-wrong="`mcp__server__tool` 不是命名风格偏好，而是运行时安全与路由需求。">
+          <h3 class="quiz-question">`mcp__server__tool` 这套命名规范最核心的作用是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>减少日志长度，提升启动速度</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>强制所有工具只读</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>避免工具名冲突，并支持精细权限匹配</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。远程 MCP skill 被视作不可信来源，必须禁止隐式 shell 执行链路。" data-explanation-wrong="关键不在 Skill 格式，而在来源信任级别：远程内容不能直接获得执行权。">
+          <h3 class="quiz-question">为什么 `loadedFrom === 'mcp'` 时要跳过内联 shell 执行？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 MCP 工具不能处理文本输入</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 MCP 来源的 skill 是远程不可信内容，需要更严格执行边界</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为所有本地 skill 只能在 plan mode 运行</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module8-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module8-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

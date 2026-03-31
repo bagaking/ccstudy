@@ -1,0 +1,188 @@
+<section class="module" id="module-6">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">06</span>
+      <h1 class="module-title">速度技巧与排障</h1>
+      <p class="module-subtitle">速度来自系统性编排，不来自单点技巧：可并行就并行，可延后就延后，可观测就留证据。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">并行启动不是锦上添花，而是直接省等待</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（约 1919-1932 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent') {</span>
+<span class="code-line">  initBuiltinPlugins();</span>
+<span class="code-line">  initBundledSkills();</span>
+<span class="code-line">}</span>
+<span class="code-line">const setupPromise = setup(preSetupCwd, permissionMode, ...);</span>
+<span class="code-line">const commandsPromise = worktreeEnabled ? null : getCommands(preSetupCwd);</span>
+<span class="code-line">const agentDefsPromise = worktreeEnabled ? null : getAgentDefinitionsWithOverrides(preSetupCwd);</span>
+<span class="code-line">commandsPromise?.catch(() => {});</span>
+<span class="code-line">agentDefsPromise?.catch(() => {});</span>
+<span class="code-line">await setupPromise;</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">先把极轻的内存内初始化做掉，然后立刻并行启动 `setup`、命令加载和 agent 定义加载。</p>
+            <p class="tl">这里的关键不是某一行代码，而是顺序设计：先完成必要前置，再让独立重任务重叠执行。</p>
+            <p class="tl">这类优化没有“魔法感”，但对启动体感极其有效。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">startup profiler 给你的是阶段证据，不是情绪</h2>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">import_time</code>
+          <span class="badge-desc">看早期 import 与模块装载是否膨胀</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">init_time</code>
+          <span class="badge-desc">看初始化逻辑是否拖慢启动</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">settings_time</code>
+          <span class="badge-desc">看设置加载是否成为瓶颈</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">total_time</code>
+          <span class="badge-desc">看整条链路总耗时</span>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">诊断性能，先问“慢在哪一段”</strong>
+          <p>启动慢、回合慢、上下文管理慢，这三种慢的修法根本不同。先定位阶段，再谈优化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">文件快照：代理的“可回滚痕迹”</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/fileHistory.ts`（第 39-70 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export type FileHistorySnapshot = {</span>
+<span class="code-line">  messageId: UUID</span>
+<span class="code-line">  trackedFileBackups: Record&lt;string, FileHistoryBackup&gt;</span>
+<span class="code-line">  timestamp: Date</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const MAX_SNAPSHOTS = 100</span>
+<span class="code-line"></span>
+<span class="code-line">export function fileHistoryEnabled(): boolean {</span>
+<span class="code-line">  return (</span>
+<span class="code-line">    getGlobalConfig().fileCheckpointingEnabled !== false &amp;&amp;</span>
+<span class="code-line">    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING)</span>
+<span class="code-line">  )</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">每次代理改文件时，系统都可以留下与 message 对应的快照。</p>
+            <p class="tl">这不是“锦上添花”的日志，而是后续回滚和排障的硬证据。</p>
+            <p class="tl">最多保留 100 个快照，够用，而且不会无限膨胀。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">auto-compact：上下文靠近上限时的缓冲策略</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/compact/autoCompact.ts`（第 62-76 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const AUTOCOMPACT_BUFFER_TOKENS = 13_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function getAutoCompactThreshold(model: string): number {</span>
+<span class="code-line">  const effectiveContextWindow = getEffectiveContextWindowSize(model)</span>
+<span class="code-line">  const autocompactThreshold =</span>
+<span class="code-line">    effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS</span>
+<span class="code-line">  return autocompactThreshold</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">系统不会等上下文完全撞线才处理，而是提前留出缓冲带。</p>
+            <p class="tl">当历史逼近阈值时，旧内容会被压缩总结，为后续回合腾出空间。</p>
+            <p class="tl">这也是长会话能继续跑下去的关键基础设施之一。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">如果明天就要排一个问题，先看哪儿</h2>
+      <div class="file-tree animate-in">
+        <div class="ft-folder open">
+          <span class="ft-name">source/claude-code-source/src/</span>
+          <span class="ft-desc">几个高命中率的排障入口</span>
+          <div class="ft-children">
+            <div class="ft-file">
+              <span class="ft-name">entrypoints/cli.tsx</span>
+              <span class="ft-desc">看启动分流和快路径是否异常</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">main.tsx</span>
+              <span class="ft-desc">看 bootstrap 顺序与并行启动</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">QueryEngine.ts</span>
+              <span class="ft-desc">看一回合内部的推进逻辑</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">services/mcp/client.ts</span>
+              <span class="ft-desc">看远程连接与会话失效</span>
+            </div>
+            <div class="ft-file">
+              <span class="ft-name">utils/permissions/permissionSetup.ts</span>
+              <span class="ft-desc">看为什么动作被允许、拒绝或改成需确认</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiz-container animate-in" id="quiz-module6-zh" style="margin-top: var(--space-8);">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。并行化独立启动工作，是最直接也最稳定的启动优化手段之一。" data-explanation-wrong="这里的关键不是神秘优化，而是让彼此独立的启动任务重叠执行。">
+          <h3 class="quiz-question">`setupPromise`、`commandsPromise` 这类写法背后的核心性能思想是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把独立启动工作并行起来，减少纯等待时间</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把 REPL 多渲染一次来热缓存</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有逻辑收进一个文件里减少 import</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果体感是“启动慢了”，优先看最早的分流入口和最重的 bootstrap 链路。" data-explanation-wrong="启动慢优先看入口和 bootstrap，而不是随机跳去 UI 样式或某个工具细节。">
+          <h3 class="quiz-question">如果一次改动后产品明显“启动更慢了”，第一批最值得看的文件是？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主题色和 tooltip 样式</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只看 QueryEngine 循环内部</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`source/claude-code-source/src/entrypoints/cli.tsx` 和 `source/claude-code-source/src/main.tsx`</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。这门课真正训练的不是背文件名，而是先把症状映射到责任边界，再去看证据。" data-explanation-wrong="好排障的起点不是随机翻文件，而是先问：这个症状最像哪一层的责任？">
+          <h3 class="quiz-question">这门课想真正帮你建立的排障能力是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有 import path 背下来</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先把症状映射到负责的层，再沿着边界去看证据</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>任何问题都先重写模块</span></button>
+          </div>
+          <div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

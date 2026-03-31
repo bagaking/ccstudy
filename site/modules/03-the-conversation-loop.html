@@ -1,0 +1,125 @@
+<section class="module" id="module-3">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">The Conversation Loop</h1>
+      <p class="module-subtitle">One user turn can include multiple model round-trips, tool calls, and context updates before completion.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">One Turn, Many Exchanges</h2>
+      <p class="animate-in">The interaction model is iterative: user request, model output, tool request, tool result, model refinement, repeat. It ends on explicit stop conditions or budget limits.</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Build context</strong><p>History + system prompt + user/system context + tool permission gate.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Model emits message</strong><p>Text response or structured `tool_use` request.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Execute tools</strong><p>Read-only operations can batch concurrently; mutating operations stay serial.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Append result and continue</strong><p>Tool output returns as message input for next model round.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Turn Handoff into `query()`</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/QueryEngine.ts` (lines 675-686)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">for await (const message of query({</span>
+<span class="code-line">  messages,</span>
+<span class="code-line">  systemPrompt,</span>
+<span class="code-line">  userContext,</span>
+<span class="code-line">  systemContext,</span>
+<span class="code-line">  canUseTool: wrappedCanUseTool,</span>
+<span class="code-line">  toolUseContext: processUserInputContext,</span>
+<span class="code-line">  fallbackModel,</span>
+<span class="code-line">  querySource: 'sdk',</span>
+<span class="code-line">  maxTurns,</span>
+<span class="code-line">  taskBudget,</span>
+<span class="code-line">})) {</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">`query()` receives complete turn state and policy constraints.</p>
+          <p class="tl">The async loop consumes messages as they stream back.</p>
+          <p class="tl">Tool permissions are injected directly into loop execution path.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Concurrency Strategy for Tool Calls</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/tools/toolOrchestration.ts` (lines 8-12, 26-36, 64-67)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">function getMaxToolUseConcurrency(): number {</span>
+<span class="code-line">  return (parseInt(process.env.CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY || '', 10) || 10)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">for (const { isConcurrencySafe, blocks } of partitionToolCalls(...)) {</span>
+<span class="code-line">  if (isConcurrencySafe) {</span>
+<span class="code-line">    // Run read-only batch concurrently</span>
+<span class="code-line">    for await (const update of runToolsConcurrently(blocks, ...)) { ... }</span>
+<span class="code-line">  } else {</span>
+<span class="code-line">    // Run non-read-only batch serially</span>
+<span class="code-line">    for await (const update of runToolsSerially(blocks, ...)) { ... }</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Concurrency defaults to 10 for safe read-only tool batches.</p>
+          <p class="tl">Partitioning is policy-aware: concurrency-safe vs order-sensitive operations.</p>
+          <p class="tl">Writes stay serial to preserve deterministic side-effect order.</p>
+        </div></div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content"><strong class="callout-title">Tool calls are messages, not direct function privilege</strong><p>The model proposes tool calls. The runtime validates, executes, and feeds results back into the next model round.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Auto-Compact Prevents Context Collapse</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/services/compact/autoCompact.ts` (lines 62-70, 72-77)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code"><span class="translation-label">CODE</span><pre><code><span class="code-line">export const AUTOCOMPACT_BUFFER_TOKENS = 13_000</span>
+<span class="code-line">const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3</span>
+<span class="code-line"></span>
+<span class="code-line">export function getAutoCompactThreshold(model: string): number {</span>
+<span class="code-line">  const effectiveContextWindow = getEffectiveContextWindowSize(model)</span>
+<span class="code-line">  const autocompactThreshold = effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS</span>
+<span class="code-line">  return autocompactThreshold</span>
+<span class="code-line">}</span></code></pre></div>
+        <div class="translation-english"><span class="translation-label">PLAIN ENGLISH</span><div class="translation-lines">
+          <p class="tl">Compaction starts before the context window is exhausted.</p>
+          <p class="tl">Buffer is explicit: 13k tokens.</p>
+          <p class="tl">A failure circuit breaker stops repeated futile compaction attempts.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module3">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Read-only batches can run concurrently while mutating batches remain serial." data-explanation-wrong="The runtime explicitly partitions safe concurrent tool calls from serial ones.">
+          <h3 class="quiz-question">Model requests `FileRead` and `Bash` in one response. What is the key orchestration rule?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always run all requested tools concurrently</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Partition by safety: read-only concurrent, mutating serial</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Always run all requested tools serially</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Looping often reflects tool-result feedback problems or stop-condition issues in turn loop." data-explanation-wrong="Infinite loops are rarely UI bugs; inspect QueryEngine loop, tool results, and stop conditions.">
+          <h3 class="quiz-question">Agent keeps calling the same tool repeatedly. Best first diagnosis?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Turn-loop feedback/stop condition issue around QueryEngine-tool-result cycle</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Theme rendering issue in REPL</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>CLI version fast-path misrouting</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. `maxTurns` is a turn-level safety budget to prevent unbounded loops." data-explanation-wrong="`maxTurns` caps iterative progression of one request.">
+          <h3 class="quiz-question">What does `maxTurns` control in practice?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Maximum files editable per repository</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Maximum tools available in tool pool</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Maximum iterative model/tool rounds for a turn</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
