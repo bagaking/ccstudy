@@ -297,33 +297,37 @@
       <div class="arch-diagram animate-in">
         <div class="arch-zone">
           <h4 class="arch-zone-label">分流</h4>
-          <div class="arch-component" data-desc="读取命令行参数，决定启动路径。">
+          <div class="arch-component" data-open-file="source/claude-code-source/src/entrypoints/cli.tsx" data-line-start="34" data-line-end="48" data-desc="分流层是系统前门。`cli.tsx` 读取原始 argv，判断这次请求是不是快路径，比如 `--version`，然后才决定要不要唤醒整套重型运行时。点开可以直接看那段分流代码。">
             <div class="arch-icon">🚪</div>
-            <span>cli.tsx</span>
+            <strong>cli.tsx</strong>
+            <span class="arch-component-meta">读取 argv，判定请求类型，选择启动分支。</span>
           </div>
         </div>
         <div class="arch-zone">
           <h4 class="arch-zone-label">引导</h4>
-          <div class="arch-component" data-desc="组装权限、工具、命令、状态和启动上下文。">
+          <div class="arch-component" data-open-file="source/claude-code-source/src/main.tsx" data-line-start="1919" data-line-end="1929" data-desc="引导层负责把一次分流后的请求变成可运行会话。`main.tsx` 会组装权限、工具、命令、技能/插件注册和并行启动链路。点开可以直接看启动扇出。">
             <div class="arch-icon">🧰</div>
-            <span>main.tsx</span>
+            <strong>main.tsx</strong>
+            <span class="arch-component-meta">组装权限、工具、命令、状态和启动并发链路。</span>
           </div>
         </div>
         <div class="arch-zone">
           <h4 class="arch-zone-label">交互</h4>
-          <div class="arch-component" data-desc="App 是壳层，REPL 是用户真正看到的终端交互循环。">
+          <div class="arch-component" data-open-file="source/claude-code-source/src/replLauncher.tsx" data-line-start="12" data-line-end="21" data-desc="交互层是用户真正停留的地方。`replLauncher.tsx` 按需加载 App 壳层和 REPL 视图，把终端会话挂载起来。点开可以看显示层如何接管运行时。">
             <div class="arch-icon">🖥️</div>
-            <span>App + REPL</span>
+            <strong>App + REPL</strong>
+            <span class="arch-component-meta">承载终端壳层与实际 prompt/response 交互面。</span>
           </div>
         </div>
         <div class="arch-zone">
           <h4 class="arch-zone-label">执行</h4>
-          <div class="arch-component" data-desc="QueryEngine 推进回合，工具层执行具体动作。">
+          <div class="arch-component" data-open-file="source/claude-code-source/src/QueryEngine.ts" data-line-start="675" data-line-end="686" data-desc="执行层把一个请求推进成多轮模型/工具往返。`QueryEngine.ts` 负责交出上下文、接回消息、调度工具并维持回合闭环。点开可以直接看 turn handoff。">
             <div class="arch-icon">🔁</div>
-            <span>QueryEngine + Tools</span>
+            <strong>QueryEngine</strong>
+            <span class="arch-component-meta">推进回合循环、调度工具，并把结果重新喂回模型。</span>
           </div>
         </div>
-        <div class="arch-description">点击角色查看它的职责。</div>
+        <div class="arch-description">点击角色，不只是看职责摘要，也能直接打开对应源码。</div>
       </div>
     </div>
 
