@@ -10,11 +10,39 @@
       <h2 class="screen-heading animate-in">Responsibility Map, Not Blob Architecture</h2>
       <p class="animate-in">Use a cast mental model: <span class="term" data-definition="Entrypoint is the first file that receives process control and routes execution.">entrypoint</span> routes, bootstrap initializes, REPL renders, QueryEngine orchestrates turns, tools execute concrete actions.</p>
       <div class="arch-diagram animate-in">
-        <div class="arch-zone"><h4 class="arch-zone-label">Routing</h4><div class="arch-component" data-desc="Reads args and selects startup path."><div class="arch-icon">🚪</div><span>cli.tsx</span></div></div>
-        <div class="arch-zone"><h4 class="arch-zone-label">Bootstrap</h4><div class="arch-component" data-desc="Builds tool pool, permissions, commands, state."><div class="arch-icon">🧰</div><span>main.tsx</span></div></div>
-        <div class="arch-zone"><h4 class="arch-zone-label">Interaction</h4><div class="arch-component" data-desc="Wraps app shell and interactive loop."><div class="arch-icon">🖥️</div><span>App + REPL</span></div></div>
-        <div class="arch-zone"><h4 class="arch-zone-label">Execution</h4><div class="arch-component" data-desc="Runs turn loop and tool orchestration."><div class="arch-icon">🔁</div><span>QueryEngine + Tools</span></div></div>
-        <div class="arch-description">Click each actor to inspect ownership.</div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">Routing</h4>
+          <div class="arch-component" data-open-file="source/claude-code-source/src/entrypoints/cli.tsx" data-line-start="34" data-line-end="48" data-desc="Routing is the front door. `cli.tsx` reads raw argv, detects cheap fast paths like `--version`, and decides whether the full app even needs to wake up. Click to open the exact dispatch code.">
+            <div class="arch-icon">🚪</div>
+            <strong>cli.tsx</strong>
+            <span class="arch-component-meta">Reads argv, classifies the request, and chooses the startup branch.</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">Bootstrap</h4>
+          <div class="arch-component" data-open-file="source/claude-code-source/src/main.tsx" data-line-start="1919" data-line-end="1929" data-desc="Bootstrap turns a routed request into a live runtime. `main.tsx` assembles permissions, tools, commands, plugin/skill registration, and startup concurrency before the REPL appears. Click to inspect the startup fan-out.">
+            <div class="arch-icon">🧰</div>
+            <strong>main.tsx</strong>
+            <span class="arch-component-meta">Builds the runtime: permissions, tools, commands, state, and startup fan-out.</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">Interaction</h4>
+          <div class="arch-component" data-open-file="source/claude-code-source/src/replLauncher.tsx" data-line-start="12" data-line-end="21" data-desc="Interaction is the visible shell. `replLauncher.tsx` lazy-loads the App wrapper and the REPL screen, then mounts the terminal experience that users actually live inside. Click to inspect the display handoff.">
+            <div class="arch-icon">🖥️</div>
+            <strong>App + REPL</strong>
+            <span class="arch-component-meta">Owns the visible terminal shell and the live prompt/response surface.</span>
+          </div>
+        </div>
+        <div class="arch-zone">
+          <h4 class="arch-zone-label">Execution</h4>
+          <div class="arch-component" data-open-file="source/claude-code-source/src/QueryEngine.ts" data-line-start="675" data-line-end="686" data-desc="Execution is where one request becomes a loop. `QueryEngine.ts` hands context into `query()`, listens for model messages, dispatches tools, and keeps the turn moving until it is done. Click to inspect the turn handoff.">
+            <div class="arch-icon">🔁</div>
+            <strong>QueryEngine</strong>
+            <span class="arch-component-meta">Runs the turn loop, dispatches tools, and feeds results back into the model.</span>
+          </div>
+        </div>
+        <div class="arch-description">Click a role to read a sharper responsibility summary and open the relevant source.</div>
       </div>
     </div>
 

@@ -782,11 +782,25 @@ p:last-child { margin-bottom: 0; }
   transition: all var(--duration-fast);
   box-shadow: var(--shadow-sm);
   font-size: var(--text-sm);
+  text-align: center;
 }
 .arch-component:hover, .arch-component.active {
   background: var(--color-accent-light);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
+}
+.arch-component strong {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  line-height: 1.1;
+  color: var(--color-text);
+}
+.arch-component-meta {
+  display: block;
+  max-width: 220px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
 }
 .arch-icon { font-size: 1.5rem; }
 .arch-description {
@@ -1872,6 +1886,13 @@ body[data-mode="audit"] .module-number {
 body.viewer-open {
   overflow: hidden;
 }
+
+.code-viewer-code .code-keyword  { color: #cba6f7; }
+.code-viewer-code .code-string   { color: #a6e3a1; }
+.code-viewer-code .code-function { color: #89b4fa; }
+.code-viewer-code .code-comment  { color: #6c7086; }
+.code-viewer-code .code-number   { color: #fab387; }
+.code-viewer-code .code-property { color: #f9e2af; }
 
 /* ── CLAUDE-LIKE REFINEMENT PASS ───────────────────────────── */
 :root {

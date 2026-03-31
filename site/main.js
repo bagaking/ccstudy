@@ -169,13 +169,36 @@
     viewerCodeEl.innerHTML = lines.map((line, idx) => {
       const lineNo = idx + 1;
       const active = lineRange && lineNo >= lineRange.start && lineNo <= lineRange.end;
-      return `<span class="code-viewer-line${active ? ' active' : ''}" data-line="${lineNo}">${escapeHtml(line)}</span>`;
+      return `<span class="code-viewer-line${active ? ' active' : ''}" data-line="${lineNo}">${highlightCode(line)}</span>`;
     }).join('');
 
     if (lineRange) {
       const target = viewerCodeEl.querySelector(`.code-viewer-line[data-line="${lineRange.start}"]`);
       if (target) target.scrollIntoView({ block: 'center' });
     }
+  }
+
+  function highlightCode(line) {
+    let comment = '';
+    let code = line;
+    const commentIdx = line.indexOf('//');
+    if (commentIdx >= 0) {
+      code = line.slice(0, commentIdx);
+      comment = line.slice(commentIdx);
+    }
+
+    let html = escapeHtml(code);
+    html = html.replace(/\b(import|export|from|const|let|var|if|else|return|await|async|for|of|function|class|new|try|catch|throw|extends|type|interface)\b/g, '<span class="code-keyword">$1</span>');
+    html = html.replace(/([A-Za-z_$][\w$]*)(?=\()/g, '<span class="code-function">$1</span>');
+    html = html.replace(/([A-Za-z_$][\w$]*)(?=\s*:)/g, '<span class="code-property">$1</span>');
+    html = html.replace(/("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|`(?:[^`\\\\]|\\\\.)*`)/g, '<span class="code-string">$1</span>');
+    html = html.replace(/\b(\d+(?:_\d+)*(?:\.\d+)?)\b/g, '<span class="code-number">$1</span>');
+
+    if (comment) {
+      html += `<span class="code-comment">${escapeHtml(comment)}</span>`;
+    }
+
+    return html;
   }
 
   function closeViewer() {
@@ -824,6 +847,14 @@
       this.classList.add('active');
       const descEl = $('.arch-description', diagram);
       if (descEl) descEl.textContent = this.dataset.desc || '';
+      if (this.dataset.openFile) {
+        const start = Number(this.dataset.lineStart || '');
+        const end = Number(this.dataset.lineEnd || '');
+        const range = Number.isFinite(start) && start > 0
+          ? { start, end: Number.isFinite(end) && end >= start ? end : start }
+          : null;
+        openViewer(this.dataset.openFile, range);
+      }
     });
   });
 
