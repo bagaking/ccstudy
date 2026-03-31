@@ -14,14 +14,14 @@
           <div class="step-num">1</div>
           <div class="step-body">
             <strong>读参数</strong>
-            <p>先确认用户到底要什么，而不是先把所有模块都拉进内存。</p>
+            <p>启动先确认用户意图。只有命中重路径时，才加载整套模块。</p>
           </div>
         </div>
         <div class="step-card animate-in">
           <div class="step-num">2</div>
           <div class="step-body">
             <strong>尽早分流</strong>
-            <p>像 `--version` 这种轻请求，应该立刻返回，而不是走完整启动链路。</p>
+            <p>`--version` 这类轻请求直接走快路径并立即返回。</p>
           </div>
         </div>
         <div class="step-card animate-in">
@@ -67,7 +67,7 @@
       <div class="callout callout-accent animate-in">
         <div class="callout-icon">💡</div>
         <div class="callout-content">
-          <strong class="callout-title">`MACRO.VERSION` 是编译期常量，不是运行期查表</strong>
+          <strong class="callout-title">`MACRO.VERSION` 在编译期注入</strong>
           <p>这意味着版本号读取几乎没有额外 runtime 成本。值在构建时就已经烘焙进产物里了。</p>
         </div>
       </div>
@@ -87,16 +87,16 @@
         <div class="translation-english">
           <span class="translation-label">中文解读</span>
           <div class="translation-lines">
-            <p class="tl">这里没有笼统地说“启动慢”，而是把启动切成具名区间。</p>
+            <p class="tl">这里把启动切成具名区间，直接定位具体耗时阶段。</p>
             <p class="tl">每个阶段都由两个 checkpoint 定义，因此可以非常明确地追责到某一段耗时。</p>
-            <p class="tl">这是工程上真正有用的性能诊断方式，而不是凭体感猜。</p>
+            <p class="tl">这套方式能直接服务性能诊断，结论来自阶段证据。</p>
           </div>
         </div>
       </div>
       <div class="callout callout-info animate-in">
         <div class="callout-icon">🧪</div>
         <div class="callout-content">
-          <strong class="callout-title">这不是演示代码，是你可以直接用的诊断工具</strong>
+          <strong class="callout-title">这套诊断工具可以直接拿来用</strong>
           <p>你现在就可以跑 `CLAUDE_CODE_PROFILE_STARTUP=1 claude --version`，看启动到底慢在 import、init 还是 settings。</p>
         </div>
       </div>
@@ -132,7 +132,7 @@
     <div class="screen">
       <h2 class="screen-heading animate-in">快速自测</h2>
       <div class="quiz-container animate-in" id="quiz-module1-zh">
-        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`--version` 的关键不是“做得少”，而是几乎不进入重型 import 链路。" data-explanation-wrong="这里最核心的优化点是：版本号路径在完整启动前就返回了，所以不会支付重型 import 成本。">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`--version` 的关键在于它几乎不进入重型 import 链路。" data-explanation-wrong="这里最核心的优化点是：版本号路径在完整启动前就返回了，因此不会支付重型 import 成本。">
           <h3 class="quiz-question">为什么 `claude --version` 会显得非常快？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它会启动一个更轻的 REPL</span></button>
@@ -141,7 +141,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。`profileCheckpoint('cli_entry')` 的价值在于把启动耗时锚定到具体阶段，而不是留下一个模糊的“慢”。" data-explanation-wrong="这类 checkpoint 的意义是建立阶段边界，为后续性能诊断提供证据。">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。`profileCheckpoint('cli_entry')` 的价值在于把启动耗时锚定到具体阶段，后续诊断有据可依。" data-explanation-wrong="这类 checkpoint 的意义是建立阶段边界，为后续性能诊断提供证据。">
           <h3 class="quiz-question">`profileCheckpoint('cli_entry')` 真正重要在哪里？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>它给启动诊断建立了明确的阶段起点</span></button>

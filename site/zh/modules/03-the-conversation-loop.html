@@ -3,7 +3,7 @@
     <header class="module-header animate-in">
       <span class="module-number">03</span>
       <h1 class="module-title">对话循环</h1>
-      <p class="module-subtitle">单次请求不是“一问一答”，而是一个状态机循环：模型输出、工具调用、结果回写、下一轮决策。</p>
+      <p class="module-subtitle">单次请求会经过一个状态机循环：模型输出、工具调用、结果回写、下一轮决策。</p>
     </header>
 
     <div class="screen">
@@ -63,9 +63,9 @@
         <div class="translation-english">
           <span class="translation-label">中文解读</span>
           <div class="translation-lines">
-            <p class="tl">这不是一次普通函数调用，而是一段异步消息流。</p>
+            <p class="tl">这里进入的是一段异步消息流，回合在消息边界上持续推进。</p>
             <p class="tl">回合推进需要完整上下文：历史消息、规则、工具权限、预算上限。</p>
-            <p class="tl">`for await` 说明系统在逐条消费模型和工具回来的事件，而不是等一个最终字符串。</p>
+            <p class="tl">`for await` 说明系统在逐条消费模型和工具回来的事件，最终输出来自整段流式推进。</p>
           </div>
         </div>
       </div>
@@ -138,7 +138,7 @@
       <div class="callout callout-info animate-in">
         <div class="callout-icon">🧠</div>
         <div class="callout-content">
-          <strong class="callout-title">模型不是在“记住”，而是在反复重读</strong>
+          <strong class="callout-title">模型每一轮都会重新读取当前上下文</strong>
           <p>每一轮都要重新带上当前上下文，所以长对话的成本和稳定性问题，本质上都和上下文管理有关。</p>
         </div>
       </div>
@@ -170,7 +170,7 @@
       </div>
 
       <div class="quiz-container animate-in" id="quiz-module3-zh" style="margin-top: var(--space-8);">
-        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。工具调度的关键不是“全并发”或“全串行”，而是按安全性分批：只读并发，变更串行。" data-explanation-wrong="这里最关键的工程判断是：读操作可以并发，写和执行类操作要串行。">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。工具调度的关键在于按安全性分批：只读并发，变更串行。" data-explanation-wrong="这里最关键的工程判断是：读操作可以并发，写和执行类操作要串行。">
           <h3 class="quiz-question">如果模型一次性请求了多项工具，系统最合理的执行策略是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>无论什么工具都全部并发</span></button>
@@ -179,7 +179,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。代理反复调用同一工具，优先怀疑回合循环里的反馈链或停止条件，而不是先怪 UI。" data-explanation-wrong="这种“同一工具不停重复”通常发生在循环衔接层：tool_result 没被正确利用，或者 stop condition 没生效。">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。代理反复调用同一工具，优先怀疑回合循环里的反馈链或停止条件，先查执行闭环。" data-explanation-wrong="这种“同一工具不停重复”通常发生在循环衔接层：tool_result 没被正确利用，或者 stop condition 没生效。">
           <h3 class="quiz-question">如果代理不停重复调用同一个工具，第一怀疑点应该是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>QueryEngine 与 tool_result 之间的反馈链或停止条件出了问题</span></button>
@@ -188,7 +188,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。`maxTurns` 控制的是一次请求内部允许发生多少轮模型/工具往返。" data-explanation-wrong="它不是限制仓库大小，也不是限制工具数量，而是限制一个回合内部的迭代深度。">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。`maxTurns` 控制的是一次请求内部允许发生多少轮模型/工具往返。" data-explanation-wrong="它限制的是一个回合内部的迭代深度。">
           <h3 class="quiz-question">`maxTurns` 在这个系统里真正约束的是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>一个仓库最多能改多少个文件</span></button>

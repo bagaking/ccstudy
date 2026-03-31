@@ -3,7 +3,7 @@
     <header class="module-header animate-in">
       <span class="module-number">08</span>
       <h1 class="module-title">扩展体系：MCP、Skills、Plugins</h1>
-      <p class="module-subtitle">能力扩展不是一把锤子。MCP 解决外部系统接入，Skills 解决流程复用，Plugins 解决深层运行时扩展。</p>
+      <p class="module-subtitle">能力扩展分成三种表面：MCP 负责外部系统接入，Skills 负责流程复用，Plugins 负责深层运行时扩展。</p>
     </header>
 
     <div class="screen">
@@ -116,7 +116,7 @@
     <div class="screen">
       <h2 class="screen-heading animate-in">快速自测</h2>
       <div class="quiz-container animate-in" id="quiz-module8-zh">
-        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。数据库这类外部能力接入属于 MCP 的典型场景。" data-explanation-wrong="这类需求核心是“协议化外部接入”，不是单纯把提示词写长。">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。数据库这类外部能力接入属于 MCP 的典型场景。" data-explanation-wrong="这类需求核心是协议化外部接入。">
           <h3 class="quiz-question">你要让代理稳定访问内部数据库服务，首选哪一层扩展？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>MCP 服务器接入</span></button>
@@ -124,7 +124,7 @@
             <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先重写启动 profiler</span></button>
           </div><div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。命名空间的价值在身份隔离与权限精确匹配。" data-explanation-wrong="`mcp__server__tool` 不是命名风格偏好，而是运行时安全与路由需求。">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。命名空间的价值在身份隔离与权限精确匹配。" data-explanation-wrong="`mcp__server__tool` 这类命名服务于运行时安全与路由需求。">
           <h3 class="quiz-question">`mcp__server__tool` 这套命名规范最核心的作用是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>减少日志长度，提升启动速度</span></button>

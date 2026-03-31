@@ -75,11 +75,14 @@
   const viewerStatusEl = $('#code-viewer-status');
   const viewerCodeEl = $('#code-viewer-code');
   const viewerGithubLink = $('#code-viewer-github');
+  const heroDossier = $('#hero-dossier');
+  const heroStartReading = $('#hero-start-reading');
   const heroOpenViewer = $('#hero-open-viewer');
 
   const REPO_OWNER = 'bagaking';
   const REPO_NAME = 'ccstudy';
   const SOURCE_BRANCHES = ['main', 'master'];
+  const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   function escapeHtml(text) {
     return text
@@ -187,12 +190,18 @@
       comment = line.slice(commentIdx);
     }
 
-    let html = escapeHtml(code);
+    const stringStore = [];
+    let html = escapeHtml(code).replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, (m) => {
+      const key = `__STR_${stringStore.length}__`;
+      stringStore.push(`<span class="code-string">${m}</span>`);
+      return key;
+    });
+
     html = html.replace(/\b(import|export|from|const|let|var|if|else|return|await|async|for|of|function|class|new|try|catch|throw|extends|type|interface)\b/g, '<span class="code-keyword">$1</span>');
     html = html.replace(/([A-Za-z_$][\w$]*)(?=\()/g, '<span class="code-function">$1</span>');
     html = html.replace(/([A-Za-z_$][\w$]*)(?=\s*:)/g, '<span class="code-property">$1</span>');
-    html = html.replace(/("(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|`(?:[^`\\\\]|\\\\.)*`)/g, '<span class="code-string">$1</span>');
     html = html.replace(/\b(\d+(?:_\d+)*(?:\.\d+)?)\b/g, '<span class="code-number">$1</span>');
+    html = html.replace(/__STR_(\d+)__/g, (_m, idx) => stringStore[Number(idx)] || '');
 
     if (comment) {
       html += `<span class="code-comment">${escapeHtml(comment)}</span>`;
@@ -330,6 +339,19 @@
   let navDots       = [];
   const modules     = $$('.module');
 
+  function decorateModules() {
+    const themes = ['ember', 'sand', 'copper', 'clay'];
+    modules.forEach((mod, i) => {
+      mod.dataset.chapter = String(i + 1).padStart(2, '0');
+      mod.dataset.theme = themes[i % themes.length];
+    });
+  }
+
+  function updateNavState() {
+    if (!body) return;
+    body.classList.toggle('nav-scrolled', window.scrollY > 18);
+  }
+
   function buildNavDots() {
     const navDotsEl = $('#nav-dots');
     if (!navDotsEl) return;
@@ -361,6 +383,7 @@
     const pct          = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
     progressBar.style.width = pct + '%';
     progressBar.setAttribute('aria-valuenow', Math.round(pct));
+    updateNavState();
     updateNavDots();
   }
 
@@ -395,6 +418,7 @@
     updateChapterActive(activeIndex);
   }
 
+  decorateModules();
   buildNavDots();
   window.addEventListener('scroll', () => requestAnimationFrame(updateProgress), { passive: true });
   updateProgress();
@@ -440,16 +464,66 @@
     const snippetCount = $$('.translation-block').length;
     const termCount = $$('.term').length;
 
-    mModules.textContent = String(moduleCount || I18N.metricNA);
-    mQuizzes.textContent = String(quizCount || I18N.metricNA);
-    mSnippets.textContent = String(snippetCount || I18N.metricNA);
-    mTerms.textContent = String(termCount || I18N.metricNA);
+    function renderMetric(el, value) {
+      if (!el) return;
+      if (!Number.isFinite(value) || value <= 0) {
+        el.textContent = I18N.metricNA;
+        return;
+      }
+      if (prefersReducedMotion) {
+        el.textContent = String(value);
+        return;
+      }
+      const start = performance.now();
+      const duration = 520 + (Math.min(value, 60) * 8);
+      const tick = (now) => {
+        const p = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - p, 3);
+        const next = Math.max(1, Math.round(eased * value));
+        el.textContent = String(next);
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    renderMetric(mModules, moduleCount);
+    renderMetric(mQuizzes, quizCount);
+    renderMetric(mSnippets, snippetCount);
+    renderMetric(mTerms, termCount);
+  }
+
+  function initHeroActions() {
+    if (!heroStartReading) return;
+    heroStartReading.addEventListener('click', () => {
+      const firstModule = modules[0];
+      if (!firstModule) return;
+      firstModule.scrollIntoView({ behavior: 'smooth' });
+      toggleRail(false);
+    });
+  }
+
+  function initHeroParallax() {
+    if (!heroDossier || prefersReducedMotion) return;
+    heroDossier.addEventListener('pointermove', (e) => {
+      const rect = heroDossier.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = ((e.clientX - rect.left) / rect.width) - 0.5;
+      const y = ((e.clientY - rect.top) / rect.height) - 0.5;
+      heroDossier.style.setProperty('--hero-shift-x', (x * 16).toFixed(2));
+      heroDossier.style.setProperty('--hero-shift-y', (y * 11).toFixed(2));
+    });
+    heroDossier.addEventListener('pointerleave', () => {
+      heroDossier.style.setProperty('--hero-shift-x', '0');
+      heroDossier.style.setProperty('--hero-shift-y', '0');
+    });
   }
 
   initMode();
   initRail();
   buildChapterList();
   initHeroMetrics();
+  initHeroActions();
+  initHeroParallax();
   mountSnippetButtons();
   bindViewerTriggers();
   if (viewerStatusEl) viewerStatusEl.textContent = I18N.viewerIdle;

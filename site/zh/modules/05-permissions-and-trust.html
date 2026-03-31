@@ -3,7 +3,7 @@
     <header class="module-header animate-in">
       <span class="module-number">05</span>
       <h1 class="module-title">权限与信任</h1>
-      <p class="module-subtitle">高能力不配边界就是高风险。权限系统的价值在于把执行权切到正确粒度，而不是增加交互摩擦。</p>
+      <p class="module-subtitle">高能力需要清晰边界。权限系统的价值在于把执行权切到正确粒度，并保持可控。</p>
     </header>
 
     <div class="screen">
@@ -26,11 +26,11 @@
           <span class="badge-desc">以规划为主，执行能力更收敛</span>
         </div>
       </div>
-      <p class="animate-in">安全策略不是“开”或“关”，而是“粒度是否正确”。规则越具体，授权面越可控。</p>
+      <p class="animate-in">安全策略取决于粒度是否正确。规则越具体，授权面越可控。</p>
     </div>
 
     <div class="screen">
-      <h2 class="screen-heading animate-in">规则匹配不是一句“允许 Bash”这么粗</h2>
+      <h2 class="screen-heading animate-in">规则匹配需要足够细，不能停留在“允许 Bash”这种粗粒度表达</h2>
       <div class="badge-list animate-in">
         <div class="badge-item">
           <code class="badge-code">Bash(git status)</code>
@@ -48,7 +48,7 @@
       <div class="callout callout-warning animate-in">
         <div class="callout-icon">⚠️</div>
         <div class="callout-content">
-          <strong class="callout-title">权限规则最怕的不是复杂，而是过宽</strong>
+          <strong class="callout-title">权限规则最怕过宽</strong>
           <p>一条看起来“很省事”的广泛授权，通常意味着你把本来该逐次审查的能力直接整体放出去了。</p>
         </div>
       </div>
@@ -119,7 +119,7 @@
         <div class="translation-english">
           <span class="translation-label">中文解读</span>
           <div class="translation-lines">
-            <p class="tl">auto mode 不是永远可重入的。一旦安全断路器被打断，上层逻辑就可以阻止它悄悄重新开启。</p>
+            <p class="tl">auto mode 存在可触发的安全断路器。断路之后，上层逻辑会阻止它悄悄重新开启。</p>
             <p class="tl">这是一种非常典型的“防止错误配置自动复活”的防线。</p>
           </div>
         </div>
@@ -129,7 +129,7 @@
     <div class="screen">
       <h2 class="screen-heading animate-in">快速自测</h2>
       <div class="quiz-container animate-in" id="quiz-module5-zh">
-        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`Bash(*)` 的真实含义几乎就是“给整个 shell 预先授权”，所以它的危险点在权限范围，而不是语法形式。" data-explanation-wrong="危险的关键不是星号本身，而是它把授权范围扩到了几乎所有 shell 命令。">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`Bash(*)` 的真实含义接近“给整个 shell 预先授权”，危险点在权限范围。" data-explanation-wrong="危险的关键在于它把授权范围扩到了几乎所有 shell 命令。">
           <h3 class="quiz-question">为什么 `Bash(*)` 会被视为高风险授权？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为 TypeScript 很难解析星号</span></button>
@@ -138,7 +138,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。更好的权限设计永远是“先窄后宽”，优先授权一个具体动作，而不是一整个类别。" data-explanation-wrong="最稳的做法是为明确命令写窄规则，而不是一上来就把整类 shell 行为都打开。">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。更好的权限设计永远是“先窄后宽”，优先授权一个具体动作，再逐步扩大范围。" data-explanation-wrong="最稳的做法是为明确命令写窄规则，再根据需要逐步扩大范围。">
           <h3 class="quiz-question">如果你希望代理自动执行一个可信的小命令，更好的配置策略是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只批准那个具体命令模式</span></button>
@@ -147,7 +147,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果自动执行突然频繁变成确认弹窗，首先就该怀疑规则太宽，被安全层剥离出了 auto-allow 路径。" data-explanation-wrong="优先查策略层，而不是先怀疑交互界面。很多“突然开始要求确认”的症状，根因就在规则被剥离或模式被断路。">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果自动执行突然频繁变成确认弹窗，首先就该怀疑规则太宽，已经被安全层剥离出 auto-allow 路径。" data-explanation-wrong="优先查策略层。很多“突然开始要求确认”的症状，根因就在规则被剥离或模式被断路。">
           <h3 class="quiz-question">如果某个动作以前能自动跑，现在却频繁要求确认，最值得先怀疑什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 动画回归</span></button>

@@ -68,7 +68,7 @@
         <div class="callout-icon">⚠️</div>
         <div class="callout-content">
           <strong class="callout-title">“模型坏了”通常是错误诊断</strong>
-          <p>如果文件没读到、命令没跑通、远程会话过期，根因更可能在工具层或连接器层，而不是模型推理本身。</p>
+          <p>如果文件没读到、命令没跑通、远程会话过期，根因通常在工具层或连接器层，优先检查执行边界。</p>
         </div>
       </div>
     </div>
@@ -119,7 +119,7 @@
       <div class="callout callout-info animate-in">
         <div class="callout-icon">📦</div>
         <div class="callout-content">
-          <strong class="callout-title">连接器不是“接上就行”，它也要做上下文预算管理</strong>
+          <strong class="callout-title">连接器同样承担上下文预算管理职责</strong>
           <p>工具越多、描述越胖、超时时间越乱，代理越容易在非模型层面失控。</p>
         </div>
       </div>
@@ -128,7 +128,7 @@
     <div class="screen">
       <h2 class="screen-heading animate-in">快速自测</h2>
       <div class="quiz-container animate-in" id="quiz-module4-zh">
-        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。session 过期首先说明连接器生命周期或远程会话状态有问题，不等于模型推理失效。" data-explanation-wrong="看到带 `-32001` 的 404，第一反应应该是连接层会话失效，而不是把锅先甩给模型。">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。session 过期首先说明连接器生命周期或远程会话状态有问题，优先走重连与恢复诊断。" data-explanation-wrong="看到带 `-32001` 的 404，第一反应应该是连接层会话失效。">
           <h3 class="quiz-question">一个 MCP 调用报 session expired，最合理的第一诊断是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>REPL 渲染出错</span></button>
@@ -137,7 +137,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。工具层就是把模型决策转成现实动作的边界，没有它，代理就只有文本输出，没有执行能力。" data-explanation-wrong="工具层不是附属品，它是模型决策落地的执行边界。">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。工具层就是把模型决策转成现实动作的边界，代理的执行能力从这里展开。" data-explanation-wrong="工具层是模型决策落地的执行边界。">
           <h3 class="quiz-question">为什么说工具架构是 agent 产品的核心之一？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>因为它负责把模型决策变成真实的数据访问与动作执行</span></button>
@@ -146,7 +146,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。既然已经有结构化协议入口，就优先走结构化入口，而不是自己乱抓网页文本。" data-explanation-wrong="MCP 资源之所以更优，是因为它天然更结构化、更可控，也更适合 agent 使用。">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。既然已经有结构化协议入口，就优先走结构化入口，减少抓取噪音和歧义。" data-explanation-wrong="MCP 资源之所以更优，是因为它天然更结构化、更可控，也更适合 agent 使用。">
           <h3 class="quiz-question">如果一个系统同时能网页抓取，也能通过 MCP 提供结构化资源，优先该走哪条路？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>总是优先抓原始 HTML</span></button>

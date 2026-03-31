@@ -7,7 +7,7 @@
     </header>
 
     <div class="screen">
-      <h2 class="screen-heading animate-in">并行启动不是锦上添花，而是直接省等待</h2>
+      <h2 class="screen-heading animate-in">并行启动会直接减少等待时间</h2>
       <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（约 1919-1932 行）</p>
       <div class="translation-block animate-in">
         <div class="translation-code">
@@ -27,7 +27,7 @@
           <span class="translation-label">中文解读</span>
           <div class="translation-lines">
             <p class="tl">先把极轻的内存内初始化做掉，然后立刻并行启动 `setup`、命令加载和 agent 定义加载。</p>
-            <p class="tl">这里的关键不是某一行代码，而是顺序设计：先完成必要前置，再让独立重任务重叠执行。</p>
+            <p class="tl">这里的关键在于顺序设计：先完成必要前置，再让独立重任务重叠执行。</p>
             <p class="tl">这类优化没有“魔法感”，但对启动体感极其有效。</p>
           </div>
         </div>
@@ -35,7 +35,7 @@
     </div>
 
     <div class="screen">
-      <h2 class="screen-heading animate-in">startup profiler 给你的是阶段证据，不是情绪</h2>
+      <h2 class="screen-heading animate-in">startup profiler 提供阶段证据</h2>
       <div class="badge-list animate-in">
         <div class="badge-item">
           <code class="badge-code">import_time</code>
@@ -88,7 +88,7 @@
           <span class="translation-label">中文解读</span>
           <div class="translation-lines">
             <p class="tl">每次代理改文件时，系统都可以留下与 message 对应的快照。</p>
-            <p class="tl">这不是“锦上添花”的日志，而是后续回滚和排障的硬证据。</p>
+            <p class="tl">这类日志会直接服务后续回滚和排障，是硬证据的一部分。</p>
             <p class="tl">最多保留 100 个快照，够用，而且不会无限膨胀。</p>
           </div>
         </div>
@@ -113,7 +113,7 @@
         <div class="translation-english">
           <span class="translation-label">中文解读</span>
           <div class="translation-lines">
-            <p class="tl">系统不会等上下文完全撞线才处理，而是提前留出缓冲带。</p>
+            <p class="tl">系统会在上下文逼近上限前提前处理，预留缓冲带。</p>
             <p class="tl">当历史逼近阈值时，旧内容会被压缩总结，为后续回合腾出空间。</p>
             <p class="tl">这也是长会话能继续跑下去的关键基础设施之一。</p>
           </div>
@@ -153,7 +153,7 @@
       </div>
 
       <div class="quiz-container animate-in" id="quiz-module6-zh" style="margin-top: var(--space-8);">
-        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。并行化独立启动工作，是最直接也最稳定的启动优化手段之一。" data-explanation-wrong="这里的关键不是神秘优化，而是让彼此独立的启动任务重叠执行。">
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。并行化独立启动工作，是最直接也最稳定的启动优化手段之一。" data-explanation-wrong="这里的关键在于让彼此独立的启动任务重叠执行。">
           <h3 class="quiz-question">`setupPromise`、`commandsPromise` 这类写法背后的核心性能思想是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把独立启动工作并行起来，减少纯等待时间</span></button>
@@ -162,7 +162,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果体感是“启动慢了”，优先看最早的分流入口和最重的 bootstrap 链路。" data-explanation-wrong="启动慢优先看入口和 bootstrap，而不是随机跳去 UI 样式或某个工具细节。">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。如果体感是“启动慢了”，优先看最早的分流入口和最重的 bootstrap 链路。" data-explanation-wrong="启动慢优先看入口和 bootstrap，先抓主要链路。">
           <h3 class="quiz-question">如果一次改动后产品明显“启动更慢了”，第一批最值得看的文件是？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主题色和 tooltip 样式</span></button>
@@ -171,7 +171,7 @@
           </div>
           <div class="quiz-feedback"></div>
         </div>
-        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。这门课真正训练的不是背文件名，而是先把症状映射到责任边界，再去看证据。" data-explanation-wrong="好排障的起点不是随机翻文件，而是先问：这个症状最像哪一层的责任？">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。这门课真正训练的是先把症状映射到责任边界，再去看证据。" data-explanation-wrong="好排障的起点是先问：这个症状最像哪一层的责任。">
           <h3 class="quiz-question">这门课想真正帮你建立的排障能力是什么？</h3>
           <div class="quiz-options">
             <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有 import path 背下来</span></button>
