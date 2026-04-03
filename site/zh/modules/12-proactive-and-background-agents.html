@@ -1,0 +1,195 @@
+<section class="module" id="module-12">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">12</span>
+      <h1 class="module-title">主动模式、后台会话与定时代理</h1>
+      <p class="module-subtitle">Claude Code 的自治执行有三条主路径：proactive tick、后台主会话任务、cron 定时任务。它们共用消息队列，并用 agent 作用域做精确路由。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先建立执行模型：三种自治回路</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">⏱️</div>
+          <h4 class="pattern-title">Proactive Tick 回路</h4>
+          <p class="pattern-desc">在队列空闲时注入隐藏 `&lt;tick&gt;` prompt，让模型持续推进任务。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧵</div>
+          <h4 class="pattern-title">后台主会话任务</h4>
+          <p class="pattern-desc">把当前主线程查询转成后台任务，前台继续可交互，输出写入独立 sidechain transcript。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🗓️</div>
+          <h4 class="pattern-title">Cron 定时任务</h4>
+          <p class="pattern-desc">从 `.claude/scheduled_tasks.json` 触发 prompt，进入 `later` 优先级队列，按 agentId 分发。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">工程关注点</strong>
+          <p>核心是队列可见性、任务归属、执行隔离。自治能力上线前，先验证这三项。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Proactive 在工具解析前激活，空闲时自动补 tick</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（1864-1868, 2197-2204）与 `source/claude-code-source/src/cli/print.ts`（1831-1854, 2475-2483）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// main.tsx</span>
+<span class="code-line">maybeActivateProactive(options)</span>
+<span class="code-line">let tools = getTools(toolPermissionContext)</span>
+<span class="code-line">...</span>
+<span class="code-line">if ((options.proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)) && !coordinatorModeModule?.isCoordinatorMode()) {</span>
+<span class="code-line">  const proactivePrompt = `... You will receive periodic &lt;tick&gt; prompts ...`</span>
+<span class="code-line">  appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${proactivePrompt}` : proactivePrompt</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// print.ts</span>
+<span class="code-line">if (proactiveModule?.isProactiveActive() && !proactiveModule.isProactivePaused()) {</span>
+<span class="code-line">  if (peek(isMainThread) === undefined && !inputClosed) scheduleProactiveTick!()</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">激活顺序有依赖关系：先进入 proactive，再构建工具集，才能让依赖 proactive 状态的工具被纳入本轮。</p>
+            <p class="tl">tick 注入有触发条件：proactive 打开、未暂停、主队列空闲、输入未关闭。</p>
+            <p class="tl">coordinator 模式有独立提示词和工具过滤，主动模式提示不会覆盖这套规则。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">REPL 挂载定时器，按 agent 归属路由任务</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/screens/REPL.tsx`（4045-4059），`source/claude-code-source/src/hooks/useScheduledTasks.ts`（84-119），`source/claude-code-source/src/query.ts`（1560-1577）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// REPL.tsx</span>
+<span class="code-line">if (feature('AGENT_TRIGGERS')) {</span>
+<span class="code-line">  useScheduledTasks!({ isLoading, assistantMode, setMessages })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// useScheduledTasks.ts</span>
+<span class="code-line">onFireTask: task =&gt; {</span>
+<span class="code-line">  if (task.agentId) injectUserMessageToTeammate(...)</span>
+<span class="code-line">  else enqueuePendingNotification({ mode: 'prompt', priority: 'later', isMeta: true, workload: WORKLOAD_CRON })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// query.ts</span>
+<span class="code-line">if (isMainThread) return cmd.agentId === undefined</span>
+<span class="code-line">return cmd.mode === 'task-notification' &amp;&amp; cmd.agentId === currentAgentId</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">定时任务有两条通路：带 `agentId` 的任务推给对应 teammate；无 `agentId` 的任务进入主线程队列。</p>
+            <p class="tl">子代理只能消费发给自己的 `task-notification`，用户 prompt 固定走主线程。</p>
+            <p class="tl">`isMeta: true` 避免系统自动触发消息污染常规会话视图。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">后台主会话任务使用独立 transcript 与 agent 上下文</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/tasks/LocalMainSessionTask.ts`（102-110, 127-142, 357-376）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">void initTaskOutputAsSymlink(taskId, getAgentTranscriptPath(asAgentId(taskId)))</span>
+<span class="code-line">...</span>
+<span class="code-line">const taskState: LocalMainSessionTaskState = {</span>
+<span class="code-line">  type: 'local_agent',</span>
+<span class="code-line">  agentId: taskId,</span>
+<span class="code-line">  agentType: 'main-session',</span>
+<span class="code-line">  isBackgrounded: true,</span>
+<span class="code-line">}</span>
+<span class="code-line">...</span>
+<span class="code-line">const agentContext: SubagentContext = { agentId: taskId, agentType: 'subagent', subagentName: 'main-session' }</span>
+<span class="code-line">void runWithAgentContext(agentContext, async () =&gt; { ...query(...) })</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">后台查询写入独立 transcript，避免和前台主会话文件发生状态冲突。</p>
+            <p class="tl">任务对象带固定 `agentId`，可以被任务系统追踪、通知、恢复。</p>
+            <p class="tl">执行时挂载 subagent 上下文，技能调用和队列分发都有明确作用域。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">本地 cron 与远程定时代理是两套执行面</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/agentSdkTypes.ts`（280-355），`source/claude-code-source/src/cli/print.ts`（2696-2733），`source/claude-code-source/src/skills/bundled/scheduleRemoteAgents.ts`（176-193, 326-335）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// agentSdkTypes.ts</span>
+<span class="code-line">type ScheduledTaskEvent = { type: 'fire'; task: CronTask } | { type: 'missed'; tasks: CronTask[] }</span>
+<span class="code-line">function watchScheduledTasks({ dir, signal, getJitterConfig }): ScheduledTasksHandle</span>
+<span class="code-line"></span>
+<span class="code-line">// print.ts</span>
+<span class="code-line">createCronScheduler({ onFire: prompt =&gt; enqueue({ mode: 'prompt', priority: 'later', isMeta: true, workload: WORKLOAD_CRON }) })</span>
+<span class="code-line"></span>
+<span class="code-line">// scheduleRemoteAgents.ts</span>
+<span class="code-line">name: 'schedule'</span>
+<span class="code-line">description: 'Create, update, list, or run scheduled remote agents ...'</span>
+<span class="code-line">isEnabled: () =&gt; ... &amp;&amp; isPolicyAllowed('allow_remote_sessions')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">本地定时任务依赖本地文件和进程内 scheduler，事件类型包含 `fire` 与 `missed`。</p>
+            <p class="tl">远程定时代理通过 `/schedule` 技能驱动云端 trigger API，受远程会话策略控制。</p>
+            <p class="tl">排障时先判断任务属于本地链路还是远程链路，再选日志和配置入口。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>先看触发来源</strong><p>`.claude/scheduled_tasks.json` 是本地链路，`/schedule` 是远程链路。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>再看运行环境</strong><p>本地进程队列执行，或云端隔离环境执行。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>最后看权限边界</strong><p>本地看队列/任务状态，远程看账号、环境、连接器和策略。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module12-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。先激活 proactive，工具集里才能包含依赖 proactive 状态的工具。" data-explanation-wrong="工具集构建依赖 proactive 状态，顺序放反会导致工具缺失。">
+          <h3 class="quiz-question">为什么 proactive 激活要放在 `getTools()` 之前？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了跳过命令加载</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了让依赖 proactive 状态的工具进入首轮工具集</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了强制进入 coordinator 模式</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。子代理只消费发给自己的 task-notification，不消费主线程用户 prompt。" data-explanation-wrong="`query.ts` 对主线程和子代理做了不同过滤条件，按 agentId 隔离。">
+          <h3 class="quiz-question">队列如何防止子代理拿到主线程用户消息？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>子代理只接收 `mode: 'task-notification'` 且 `agentId` 匹配的命令</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>存在子代理时停止所有队列消费</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有 prompt 改写成 slash 命令</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。远程 trigger 走云端 API；本地 cron 走进程内 scheduler 与本地任务文件。" data-explanation-wrong="两条链路的配置位置、运行位置、权限入口都不同。">
+          <h3 class="quiz-question">`/schedule` 远程定时代理与本地定时任务的关系，哪项描述正确？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>同一套 scheduler，只是 UI 名称不同</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>远程 trigger 先读取本地 `.claude/scheduled_tasks.json`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>远程 trigger 是云端作业，本地定时任务是本地进程内事件</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module12-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module12-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

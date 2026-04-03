@@ -115,8 +115,19 @@
           </div>
         </div>
         <div class="code-viewer-status" id="code-viewer-status">点击页面中的文件引用即可加载源码。</div>
-        <div class="code-viewer-body">
-          <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+        <div class="code-viewer-layout">
+          <aside class="code-viewer-sidebar" aria-label="源码目录">
+            <label class="code-viewer-search-label" for="code-viewer-search">目录</label>
+            <input class="code-viewer-search" id="code-viewer-search" type="search" placeholder="搜索文件或目录">
+            <div class="code-viewer-breadcrumbs" id="code-viewer-breadcrumbs"></div>
+            <div class="code-viewer-directory" id="code-viewer-directory"></div>
+          </aside>
+          <div class="code-viewer-main">
+            <div class="code-viewer-focus" id="code-viewer-focus">聚焦：整份文件</div>
+            <div class="code-viewer-body">
+              <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+            </div>
+          </div>
         </div>
       </div>
     </section>

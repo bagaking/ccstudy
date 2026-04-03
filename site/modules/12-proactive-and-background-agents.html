@@ -1,0 +1,206 @@
+<section class="module" id="module-12">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">12</span>
+      <h1 class="module-title">Proactive, Background, and Scheduled Agents</h1>
+      <p class="module-subtitle">Claude Code runs autonomous work through three execution paths: proactive ticks, backgrounded session tasks, and cron-triggered prompts. They share the same command queue, with explicit routing by agent identity and mode.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">One runtime, three autonomy loops</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">⏱️</div>
+          <h4 class="pattern-title">Proactive Loop</h4>
+          <p class="pattern-desc">Injects periodic hidden `&lt;tick&gt;` prompts so the model can continue work without a human message every turn.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧵</div>
+          <h4 class="pattern-title">Background Session</h4>
+          <p class="pattern-desc">Moves a running main query into a task with its own transcript sidechain, while the foreground UI stays responsive.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🗓️</div>
+          <h4 class="pattern-title">Scheduled Task</h4>
+          <p class="pattern-desc">Cron scheduler fires prompts from `.claude/scheduled_tasks.json` and enqueues them as low-priority meta commands.</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">Design rule</strong>
+          <p>Autonomy paths are useful only when queue routing, agent scoping, and visibility controls are explicit. This module focuses on those boundaries.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Proactive mode is activated before tool resolution, then sustained with tick injection</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (lines 1864-1868, 2197-2204) and `source/claude-code-source/src/cli/print.ts` (lines 1831-1854, 2475-2483)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// main.tsx</span>
+<span class="code-line">maybeActivateProactive(options)</span>
+<span class="code-line">let tools = getTools(toolPermissionContext)</span>
+<span class="code-line">...</span>
+<span class="code-line">if ((options.proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)) && !coordinatorModeModule?.isCoordinatorMode()) {</span>
+<span class="code-line">  const proactivePrompt = `... You will receive periodic &lt;tick&gt; prompts ...`</span>
+<span class="code-line">  appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${proactivePrompt}` : proactivePrompt</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// print.ts</span>
+<span class="code-line">if (proactiveModule?.isProactiveActive() && !proactiveModule.isProactivePaused()) {</span>
+<span class="code-line">  if (peek(isMainThread) === undefined && !inputClosed) scheduleProactiveTick!()</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Sleep/tool availability depends on proactive state, so activation happens before `getTools()`.</p>
+            <p class="tl">The runtime then keeps autonomy alive by adding hidden tick prompts only when the queue is idle.</p>
+            <p class="tl">Coordinator mode is excluded so proactive instructions do not conflict with coordinator-specific delegation logic.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Scheduled tasks are mounted in REPL and routed by agent ownership</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/screens/REPL.tsx` (lines 4045-4059), `source/claude-code-source/src/hooks/useScheduledTasks.ts` (lines 84-119), and `source/claude-code-source/src/query.ts` (lines 1560-1577)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// REPL.tsx</span>
+<span class="code-line">if (feature('AGENT_TRIGGERS')) {</span>
+<span class="code-line">  useScheduledTasks!({ isLoading, assistantMode, setMessages })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// useScheduledTasks.ts</span>
+<span class="code-line">const scheduler = createCronScheduler({</span>
+<span class="code-line">  onFireTask: task =&gt; {</span>
+<span class="code-line">    if (task.agentId) injectUserMessageToTeammate(...)</span>
+<span class="code-line">    else enqueuePendingNotification({ mode: 'prompt', priority: 'later', isMeta: true, workload: WORKLOAD_CRON })</span>
+<span class="code-line">  }</span>
+<span class="code-line">})</span>
+<span class="code-line"></span>
+<span class="code-line">// query.ts</span>
+<span class="code-line">if (isMainThread) return cmd.agentId === undefined</span>
+<span class="code-line">return cmd.mode === 'task-notification' &amp;&amp; cmd.agentId === currentAgentId</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Cron fires are not all equivalent: teammate-bound tasks route to a specific agent; lead tasks route to the main queue.</p>
+            <p class="tl">Queue draining is agent-scoped, so subagents cannot consume main-thread prompts.</p>
+            <p class="tl">`isMeta: true` keeps system-generated cron prompts out of normal transcript noise.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Backgrounding a main session creates an isolated task transcript</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/tasks/LocalMainSessionTask.ts` (lines 102-110, 127-142, 357-376)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">void initTaskOutputAsSymlink(taskId, getAgentTranscriptPath(asAgentId(taskId)))</span>
+<span class="code-line">...</span>
+<span class="code-line">const taskState: LocalMainSessionTaskState = {</span>
+<span class="code-line">  type: 'local_agent',</span>
+<span class="code-line">  agentId: taskId,</span>
+<span class="code-line">  agentType: 'main-session',</span>
+<span class="code-line">  isBackgrounded: true,</span>
+<span class="code-line">}</span>
+<span class="code-line">...</span>
+<span class="code-line">const agentContext: SubagentContext = {</span>
+<span class="code-line">  agentId: taskId,</span>
+<span class="code-line">  agentType: 'subagent',</span>
+<span class="code-line">  subagentName: 'main-session',</span>
+<span class="code-line">}</span>
+<span class="code-line">void runWithAgentContext(agentContext, async () =&gt; { ...query(...) })</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">A backgrounded main query does not keep writing into the foreground transcript file.</p>
+            <p class="tl">It becomes a tracked `local_agent` task with its own agent ID and sidechain output path, so `/clear` and resume logic stay consistent.</p>
+            <p class="tl">The async execution is wrapped in subagent context to preserve skill scoping and task-specific routing.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Local scheduled tasks and remote scheduled agents are separate products</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/agentSdkTypes.ts` (lines 280-355), `source/claude-code-source/src/cli/print.ts` (lines 2696-2733), and `source/claude-code-source/src/skills/bundled/scheduleRemoteAgents.ts` (lines 176-193, 326-335)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// agentSdkTypes.ts</span>
+<span class="code-line">export type ScheduledTaskEvent = { type: 'fire'; task: CronTask } | { type: 'missed'; tasks: CronTask[] }</span>
+<span class="code-line">export function watchScheduledTasks(_opts: { dir: string; signal: AbortSignal; ... }): ScheduledTasksHandle</span>
+<span class="code-line"></span>
+<span class="code-line">// print.ts</span>
+<span class="code-line">cronScheduler = createCronScheduler({ onFire: prompt =&gt; enqueue({ mode: 'prompt', priority: 'later', isMeta: true, workload: WORKLOAD_CRON }) })</span>
+<span class="code-line"></span>
+<span class="code-line">// scheduleRemoteAgents.ts</span>
+<span class="code-line">description: 'Create, update, list, or run scheduled remote agents ...'</span>
+<span class="code-line">allowedTools: [REMOTE_TRIGGER_TOOL_NAME, ASK_USER_QUESTION_TOOL_NAME]</span>
+<span class="code-line">isEnabled: () =&gt; ... &amp;&amp; isPolicyAllowed('allow_remote_sessions')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Local cron uses `.claude/scheduled_tasks.json` and an in-process scheduler with lock semantics.</p>
+            <p class="tl">Remote scheduling is a skill-backed control flow over trigger APIs and cloud session policy gates.</p>
+            <p class="tl">Treat them as two operational surfaces: local daemon timing versus remote CCR orchestration.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">Local Cron</code>
+          <span class="badge-desc">File-backed schedule, queue enqueue, REPL/SDK runtime ownership</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Remote Trigger</code>
+          <span class="badge-desc">Cloud execution, environment selection, connector validation, remote policy checks</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module12">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Proactive activation must happen before tool resolution so proactive-gated tools are available immediately." data-explanation-wrong="The proactive state is needed before `getTools()` so proactive-gated tools are included in the tool list.">
+          <h3 class="quiz-question">Why does startup activate proactive mode before calling `getTools()`?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To skip loading command definitions</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To ensure proactive-gated tools are enabled in the first tool set</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To force coordinator mode on every session</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Subagents only drain task notifications addressed to their own `agentId`." data-explanation-wrong="Queue draining in `query.ts` is explicitly scoped by `agentId`; subagents do not consume main-thread prompt traffic.">
+          <h3 class="quiz-question">How does the command queue prevent a subagent from consuming user prompt traffic?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It filters subagent draining to `mode: 'task-notification'` with matching `agentId`</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It disables queueing whenever a subagent exists</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It rewrites all prompts into slash commands</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. The `/schedule` skill drives cloud triggers; local cron uses in-process scheduler paths and local task files." data-explanation-wrong="Remote scheduled agents and local cron tasks are separate execution surfaces with different ownership and policy paths.">
+          <h3 class="quiz-question">Which statement best describes `/schedule` remote agents versus local scheduled tasks?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>They are the same scheduler with different UI labels</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Remote triggers always read `.claude/scheduled_tasks.json` first</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Remote triggers are cloud jobs via trigger APIs; local scheduled tasks are in-process cron queue events</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module12')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module12')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,221 @@
+<section class="module" id="module-11">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">11</span>
+      <h1 class="module-title">Agent Teams and Communication</h1>
+      <p class="module-subtitle">Multi-agent behavior works only when coordination policy, transport, UI queues, and message formats align. Claude Code implements all four as explicit runtime surfaces.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Communication is architecture, not a side channel</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🎯</div>
+          <h4 class="pattern-title">Coordinator policy</h4>
+          <p class="pattern-desc">The coordinator prompt defines who delegates, who verifies, and how worker outputs are interpreted.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">📬</div>
+          <h4 class="pattern-title">Mailbox transport</h4>
+          <p class="pattern-desc">Teammates exchange protocol messages through inbox files with lock-based serialization.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧭</div>
+          <h4 class="pattern-title">Runtime queues</h4>
+          <p class="pattern-desc">REPL and AppState keep dedicated queues for worker permission handshakes and sandbox approvals.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📡</div>
+          <h4 class="pattern-title">Headless parity</h4>
+          <p class="pattern-desc">`print.ts` drains team notifications and feeds them back into the model loop, matching interactive behavior.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">A worker team is a protocol system</strong>
+          <p>Without structured routing, typed messages, and queue ownership, multi-agent runs degrade into duplicated work and stale decisions.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Coordinator mode encodes the operating contract</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/coordinator/coordinatorMode.ts` (lines 80-109, 116-145, 204-218)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getCoordinatorUserContext(...) {</span>
+<span class="code-line">  const workerTools = ... Array.from(ASYNC_AGENT_ALLOWED_TOOLS)</span>
+<span class="code-line">    .filter(name =&gt; !INTERNAL_WORKER_TOOLS.has(name))</span>
+<span class="code-line">  let content = `Workers spawned via the ${AGENT_TOOL_NAME} tool ...`</span>
+<span class="code-line">  if (mcpClients.length &gt; 0) { ... }</span>
+<span class="code-line">  if (scratchpadDir &amp;&amp; isScratchpadGateEnabled()) { ... }</span>
+<span class="code-line">  return { workerToolsContext: content }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">Worker results arrive as user-role messages containing</span>
+<span class="code-line">`&lt;task-notification&gt;` XML ...</span>
+<span class="code-line"></span>
+<span class="code-line">| Research | Workers (parallel) | ... |</span>
+<span class="code-line">| Synthesis | You (coordinator) | ... |</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Coordinator mode is explicit: worker tool access, MCP access, and optional scratchpad behavior are injected into context.</p>
+            <p class="tl">Worker outputs are not free-form chat. They are wrapped in `&lt;task-notification&gt;` payloads that the coordinator must parse as system signals.</p>
+            <p class="tl">The built-in workflow expects parallel research, coordinator synthesis, then implementation and verification.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Mailbox transport is file-backed and lock-safe</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/teammateMailbox.ts` (lines 31-41, 56-66, 134-191, 1065-1091)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const LOCK_OPTIONS = { retries: { retries: 10, minTimeout: 5, maxTimeout: 100 } }</span>
+<span class="code-line"></span>
+<span class="code-line">export function getInboxPath(agentName: string, teamName?: string): string {</span>
+<span class="code-line">  const inboxDir = join(getTeamsDir(), safeTeam, 'inboxes')</span>
+<span class="code-line">  return join(inboxDir, `${safeAgentName}.json`)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">release = await lockfile.lock(inboxPath, { lockfilePath, ...LOCK_OPTIONS })</span>
+<span class="code-line">const messages = await readMailbox(recipientName, teamName)</span>
+<span class="code-line">messages.push({ ...message, read: false })</span>
+<span class="code-line">await writeFile(inboxPath, jsonStringify(messages, null, 2), 'utf-8')</span>
+<span class="code-line"></span>
+<span class="code-line">type === 'permission_request' || type === 'sandbox_permission_request' || ...</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Each agent has a deterministic inbox path under `.claude/teams/{team}/inboxes/`.</p>
+            <p class="tl">Concurrent writers are serialized with lock files and retry backoff, so messages do not clobber each other.</p>
+            <p class="tl">Structured protocol message types are filtered so they route to handlers instead of leaking into raw model context.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">Transport integrity is part of model quality</strong>
+          <p>If mailbox writes race or protocol messages are misrouted, model reasoning degrades even when prompts are correct.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Permission handshakes bridge worker and leader UIs</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/screens/REPL.tsx` (lines 2216-2248, 4672-4719) + `source/claude-code-source/src/utils/swarm/permissionSync.ts` (lines 8-18, 805-918)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (isAgentSwarmsEnabled() &amp;&amp; isSwarmWorker()) {</span>
+<span class="code-line">  const requestId = generateSandboxRequestId()</span>
+<span class="code-line">  const sent = await sendSandboxPermissionRequestViaMailbox(hostPattern.host, requestId)</span>
+<span class="code-line">  registerSandboxPermissionCallback({ requestId, host, resolve })</span>
+<span class="code-line">  setAppState(...pendingSandboxRequest...)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">focusedInputDialog === 'worker-sandbox-permission' ...</span>
+<span class="code-line">sendSandboxPermissionResponseViaMailbox(workerName, requestId, host, allow, teamName)</span>
+<span class="code-line">setAppState(...workerSandboxPermissions.queue.slice(1))</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Workers do not approve their own restricted network actions; they forward requests to the leader.</p>
+            <p class="tl">The leader receives queued requests in UI, responds, and sends decisions back over mailbox transport.</p>
+            <p class="tl">Both sides track pending state, so users can see whether work is blocked on communication.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Mailbox conversation pattern</h2>
+      <div class="chat-window animate-in" id="chat-module11">
+        <div class="chat-messages">
+          <div class="chat-message" data-msg="0" data-sender="a" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-1)">W</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-1)">Worker</span><p>`sandbox_permission_request` sent to leader mailbox with request ID and host.</p></div></div>
+          <div class="chat-message" data-msg="1" data-sender="b" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-2)">L</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-2)">Leader REPL</span><p>Request appears in `workerSandboxPermissions.queue` and opens approval dialog.</p></div></div>
+          <div class="chat-message" data-msg="2" data-sender="c" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-3)">L</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-3)">Leader</span><p>Decision sent back as `sandbox_permission_response` via mailbox.</p></div></div>
+          <div class="chat-message" data-msg="3" data-sender="d" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-4)">W</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-4)">Worker</span><p>Pending indicator clears; blocked tool execution resumes with the leader decision.</p></div></div>
+          <div class="chat-message" data-msg="4" data-sender="e" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-5)">C</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-5)">Coordinator</span><p>Completion arrives as `&lt;task-notification&gt;` and enters the next synthesis turn.</p></div></div>
+        </div>
+        <div class="chat-typing" id="chat-module11-typing" style="display:none">
+          <div class="chat-avatar" id="chat-module11-typing-avatar">?</div><div class="chat-typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>
+        </div>
+        <div class="chat-controls"><button class="btn chat-next-btn">Next Message</button><button class="btn chat-all-btn">Play All</button><button class="btn chat-reset-btn">Replay</button><span class="chat-progress"></span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Startup snapshots and headless polling keep teams coherent</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/setup.ts` (lines 104-109, 365-368) + `source/claude-code-source/src/main.tsx` (lines 3030-3035) + `source/claude-code-source/src/utils/swarm/reconnection.ts` (lines 16-25, 57-65) + `source/claude-code-source/src/state/AppStateStore.ts` (lines 323-384) + `source/claude-code-source/src/cli/print.ts` (lines 2010-2093, 2497-2612)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">captureTeammateModeSnapshot()</span>
+<span class="code-line">startTeamMemoryWatcher()</span>
+<span class="code-line">teamContext: assistantTeamContext ?? computeInitialTeamContext?.()</span>
+<span class="code-line">teamContext: { teamName, leadAgentId, selfAgentName, teammates: {} }</span>
+<span class="code-line">workerSandboxPermissions.queue / pendingWorkerRequest / pendingSandboxRequest</span>
+<span class="code-line"></span>
+<span class="code-line">if (command.mode === 'task-notification') { ... parse XML ... }</span>
+<span class="code-line">const unread = await readUnreadMessages('team-lead', teamName)</span>
+<span class="code-line">enqueue({ mode: 'prompt', value: formattedTeammateXml })</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Team mode and team memory sync are initialized at startup so teammates share stable behavior throughout a session.</p>
+            <p class="tl">`teamContext` and worker-permission queues are first-class AppState fields, not ad hoc local variables.</p>
+            <p class="tl">Headless mode still parses task notifications and polls unread mailbox messages, then feeds them back into model turns.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">State Plane</code><span class="badge-desc">`teamContext`, inbox, and worker permission queues in `AppStateStore`</span></div>
+        <div class="badge-item"><code class="badge-code">Transport Plane</code><span class="badge-desc">Mailbox JSON + lock files + typed protocol messages</span></div>
+        <div class="badge-item"><code class="badge-code">Execution Plane</code><span class="badge-desc">REPL and print mode both route teammate outputs back to the turn loop</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module11">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. The coordinator prompt explicitly says worker results arrive as `&lt;task-notification&gt;` payloads that must be interpreted as internal signals." data-explanation-wrong="Worker completions are structured notifications, not ordinary chat turns.">
+          <h3 class="quiz-question">In coordinator mode, how should worker completion messages be treated?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>As regular user chat messages to answer directly</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>As structured `&lt;task-notification&gt;` signals to parse and synthesize</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>As plugin lifecycle events only</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Exactly. `writeToMailbox` acquires a lock, rereads current messages, appends, and writes back." data-explanation-wrong="Mailbox writes are guarded by lock files with retry policy to avoid concurrent write races.">
+          <h3 class="quiz-question">Which mechanism protects teammate mailbox writes from race conditions?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Sorting messages by timestamp before read</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Running all workers serially by design</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Lockfile-based serialization with retries and append-after-reread</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Yes. Workers route sandbox requests to the leader and wait on mailbox responses while pending state is shown in UI." data-explanation-wrong="Workers do not self-approve restricted network requests in swarm mode.">
+          <h3 class="quiz-question">When a swarm worker needs restricted network access, what is the intended path?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Forward request to leader via mailbox, then resume from leader response</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Auto-allow in worker if host was seen before</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Drop the tool call and continue without notification</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module11')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module11')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

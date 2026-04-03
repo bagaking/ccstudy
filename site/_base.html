@@ -115,8 +115,19 @@
           </div>
         </div>
         <div class="code-viewer-status" id="code-viewer-status">Select a file reference to load source.</div>
-        <div class="code-viewer-body">
-          <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+        <div class="code-viewer-layout">
+          <aside class="code-viewer-sidebar" aria-label="Source directory">
+            <label class="code-viewer-search-label" for="code-viewer-search">Directory</label>
+            <input class="code-viewer-search" id="code-viewer-search" type="search" placeholder="Search files or folders">
+            <div class="code-viewer-breadcrumbs" id="code-viewer-breadcrumbs"></div>
+            <div class="code-viewer-directory" id="code-viewer-directory"></div>
+          </aside>
+          <div class="code-viewer-main">
+            <div class="code-viewer-focus" id="code-viewer-focus">Focus: full file</div>
+            <div class="code-viewer-body">
+              <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+            </div>
+          </div>
         </div>
       </div>
     </section>

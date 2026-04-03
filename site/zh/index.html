@@ -115,8 +115,19 @@
           </div>
         </div>
         <div class="code-viewer-status" id="code-viewer-status">点击页面中的文件引用即可加载源码。</div>
-        <div class="code-viewer-body">
-          <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+        <div class="code-viewer-layout">
+          <aside class="code-viewer-sidebar" aria-label="源码目录">
+            <label class="code-viewer-search-label" for="code-viewer-search">目录</label>
+            <input class="code-viewer-search" id="code-viewer-search" type="search" placeholder="搜索文件或目录">
+            <div class="code-viewer-breadcrumbs" id="code-viewer-breadcrumbs"></div>
+            <div class="code-viewer-directory" id="code-viewer-directory"></div>
+          </aside>
+          <div class="code-viewer-main">
+            <div class="code-viewer-focus" id="code-viewer-focus">聚焦：整份文件</div>
+            <div class="code-viewer-body">
+              <pre class="code-viewer-pre"><code id="code-viewer-code"></code></pre>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1517,6 +1528,884 @@
         </div>
         <button class="quiz-check-btn" onclick="checkQuiz('quiz-module8-zh')">检查答案</button>
         <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module8-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-9">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">09</span>
+      <h1 class="module-title">成本与 Token 经济学</h1>
+      <p class="module-subtitle">Claude Code 把成本、Token、上下文压力拆成独立账本。看懂这些账本的计算位置，才能做稳定的预算和运行策略。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">一个会话会同时更新多套经济指标</h2>
+      <p class="animate-in">同一轮响应可以同时影响美元成本、Token 分类计数、时延指标、代码改动规模。成本治理是系统问题，单看一个数字会丢失关键信号。</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">💵</div>
+          <h4 class="pattern-title">计费账本</h4>
+          <p class="pattern-desc">累计 `totalCostUSD` 和按模型拆分的 USD，再统一格式化输出。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧮</div>
+          <h4 class="pattern-title">Token 账本</h4>
+          <p class="pattern-desc">输入、输出、cache read、cache creation、web search 请求分别统计。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📏</div>
+          <h4 class="pattern-title">运行账本</h4>
+          <p class="pattern-desc">API 时长、墙钟时长、代码增删行、工具信号按会话持久化。</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">⚙️</div>
+        <div class="callout-content">
+          <strong class="callout-title">同一条响应会联动多账本</strong>
+          <p>当响应里既有 token usage 又有 tool 行为时，成本、预算压力、代码行为统计会一起变化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">会话成本累加按 Token 类型细分</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cost-tracker.ts`（第 266-322 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">modelUsage.inputTokens += usage.input_tokens</span>
+<span class="code-line">modelUsage.outputTokens += usage.output_tokens</span>
+<span class="code-line">modelUsage.cacheReadInputTokens += usage.cache_read_input_tokens ?? 0</span>
+<span class="code-line">modelUsage.cacheCreationInputTokens += usage.cache_creation_input_tokens ?? 0</span>
+<span class="code-line">modelUsage.webSearchRequests += usage.server_tool_use?.web_search_requests ?? 0</span>
+<span class="code-line">modelUsage.costUSD += cost</span>
+<span class="code-line"></span>
+<span class="code-line">getCostCounter()?.add(cost, attrs)</span>
+<span class="code-line">getTokenCounter()?.add(usage.input_tokens, { ...attrs, type: 'input' })</span>
+<span class="code-line">getTokenCounter()?.add(usage.output_tokens, { ...attrs, type: 'output' })</span>
+<span class="code-line"></span>
+<span class="code-line">for (const advisorUsage of getAdvisorUsage(usage)) {</span>
+<span class="code-line">  const advisorCost = calculateUSDCost(advisorUsage.model, advisorUsage)</span>
+<span class="code-line">  totalCost += addToTotalSessionCost(advisorCost, advisorUsage, advisorUsage.model)</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">成本计算采用分类记账，覆盖总量和分类维度。</p>
+            <p class="tl">输入、输出、缓存读写、WebSearch 都有独立计数器。</p>
+            <p class="tl">advisor 产生的嵌套用量会递归计入总成本。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">按模型聚合</code><span class="badge-desc">终端摘要会按模型短名显示 usage 和 cost。</span></div>
+        <div class="badge-item"><code class="badge-code">Fast 标记</code><span class="badge-desc">开启 fast 模式时，指标会附带 `speed: 'fast'` 属性。</span></div>
+        <div class="badge-item"><code class="badge-code">未知模型告警</code><span class="badge-desc">`formatTotalCost()` 可标记“成本可能不准确”。</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">成本状态按会话 ID 持久化和恢复</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cost-tracker.ts`（第 87-175 行），`source/claude-code-source/src/costHook.ts`（第 6-21 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (projectConfig.lastSessionId !== sessionId) {</span>
+<span class="code-line">  return undefined</span>
+<span class="code-line">}</span>
+<span class="code-line">...</span>
+<span class="code-line">saveCurrentProjectConfig(current =&gt; ({</span>
+<span class="code-line">  ...current,</span>
+<span class="code-line">  lastCost: getTotalCostUSD(),</span>
+<span class="code-line">  lastTotalInputTokens: getTotalInputTokens(),</span>
+<span class="code-line">  lastTotalOutputTokens: getTotalOutputTokens(),</span>
+<span class="code-line">  lastSessionId: getSessionId(),</span>
+<span class="code-line">}))</span>
+<span class="code-line"></span>
+<span class="code-line">if (hasConsoleBillingAccess()) {</span>
+<span class="code-line">  process.stdout.write('\\n' + formatTotalCost() + '\\n')</span>
+<span class="code-line">}</span>
+<span class="code-line">saveCurrentSessionCosts(getFpsMetrics?.())</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">恢复逻辑先校验 session id，一致才会回填历史成本状态。</p>
+            <p class="tl">进程退出时会保存当前会话快照；有控制台账单权限才打印详细成本摘要。</p>
+            <p class="tl">这样可以保证续跑连续性，同时控制成本信息展示范围。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>写入快照</strong><p>保存成本、token、模型用量、时长、代码增删行等字段。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>绑定会话</strong><p>记录 `lastSessionId`，跨会话恢复直接拒绝。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>恢复时补元数据</strong><p>模型用量恢复时补上 context window 和 max output tokens 信息。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Token 预算续跑包含明确解析器和停止条件</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/tokenBudget.ts`（第 3-29、66-72 行），`source/claude-code-source/src/query/tokenBudget.ts`（第 3-93 行），`source/claude-code-source/src/query.ts`（第 1308-1354 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const SHORTHAND_START_RE = /^\\s*\\+(\\d+(?:\\.\\d+)?)\\s*(k|m|b)\\b/i</span>
+<span class="code-line">const VERBOSE_RE = /\\b(?:use|spend)\\s+(\\d+(?:\\.\\d+)?)\\s*(k|m|b)\\s*tokens?\\b/i</span>
+<span class="code-line">...</span>
+<span class="code-line">if (!isDiminishing &amp;&amp; turnTokens &lt; budget * 0.9) {</span>
+<span class="code-line">  return { action: 'continue', nudgeMessage: getBudgetContinuationMessage(...) }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if (decision.action === 'continue') {</span>
+<span class="code-line">  state = {</span>
+<span class="code-line">    ...state,</span>
+<span class="code-line">    messages: [...messagesForQuery, ...assistantMessages, createUserMessage({ content: decision.nudgeMessage, isMeta: true })],</span>
+<span class="code-line">    transition: { reason: 'token_budget_continuation' },</span>
+<span class="code-line">  }</span>
+<span class="code-line">  continue</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">预算语法支持 `+500k` 这类短写，也支持 “use/spend 2m tokens” 这类长写。</p>
+            <p class="tl">在预算 90% 以内且未触发边际收益衰减时，系统会自动续跑。</p>
+            <p class="tl">续跑通过一条 `isMeta` 的用户消息注入，不需要用户再发一轮输入。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧷</div>
+        <div class="callout-content">
+          <strong class="callout-title">`task_budget` 与 `+500k` 是两套机制</strong>
+          <p>`QueryParams` 注释明确区分 API `taskBudget` 和本地 token-budget 续跑（`source/claude-code-source/src/query.ts` 第 193-197 行）。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">不同 Token 函数服务不同语义场景</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/tokens.ts`（第 46-53、79-112、226-260 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getTokenCountFromUsage(usage: Usage): number {</span>
+<span class="code-line">  return usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + usage.output_tokens</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function finalContextTokensFromLastResponse(messages: Message[]): number {</span>
+<span class="code-line">  // input + output from final iteration; excludes cache tokens</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function tokenCountWithEstimation(messages: readonly Message[]): number {</span>
+<span class="code-line">  // canonical threshold metric: usage + rough estimate of trailing messages</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">有的函数把 cache token 计入总量，有的函数按预算公式排除 cache，语义目标不同。</p>
+            <p class="tl">`tokenCountWithEstimation()` 是阈值判断主函数，组合了“最近 usage + 后续消息估算”。</p>
+            <p class="tl">选错函数会直接导致 compact 或预算判断偏离真实上下文压力。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">`getTokenCountFromUsage`</code><span class="badge-desc">输入+输出+缓存读写总和。</span></div>
+        <div class="badge-item"><code class="badge-code">`finalContextTokensFromLastResponse`</code><span class="badge-desc">用于 task_budget 剩余额度语义，排除 cache。</span></div>
+        <div class="badge-item"><code class="badge-code">`tokenCountWithEstimation`</code><span class="badge-desc">用于阈值控制，覆盖 split assistant record 场景。</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">运维可见性：`/cost` 与 `/insights` 负责不同时间尺度</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/commands/cost/cost.ts`（第 6-24 行），`source/claude-code-source/src/commands/insights.ts`（第 525-533、538-550、1145-1225 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// /cost</span>
+<span class="code-line">if (isClaudeAISubscriber()) {</span>
+<span class="code-line">  if (currentLimits.isUsingOverage) { ... } else { ... }</span>
+<span class="code-line">  return { type: 'text', value }</span>
+<span class="code-line">}</span>
+<span class="code-line">return { type: 'text', value: formatTotalCost() }</span>
+<span class="code-line"></span>
+<span class="code-line">// /insights extraction + aggregation</span>
+<span class="code-line">if (usage) {</span>
+<span class="code-line">  inputTokens += usage.input_tokens || 0</span>
+<span class="code-line">  outputTokens += usage.output_tokens || 0</span>
+<span class="code-line">}</span>
+<span class="code-line">if (toolName === 'WebSearch') usesWebSearch = true</span>
+<span class="code-line">...</span>
+<span class="code-line">result.total_input_tokens += session.input_tokens</span>
+<span class="code-line">result.total_output_tokens += session.output_tokens</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`/cost` 提供当前会话的即时状态输出，同时区分订阅和 overage 提示文案。</p>
+            <p class="tl">`/insights` 读取历史会话日志，抽取 token/tool/edit 特征并跨会话聚合。</p>
+            <p class="tl">两者组合后，既能看当下运行成本，也能看长期使用模式。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module9-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`addToTotalSessionCost` 会递归纳入 advisor usage。嵌套模型调用也会进入总成本。" data-explanation-wrong="代码里存在 advisor usage 的递归累加逻辑，总成本会覆盖顶层与嵌套调用。">
+          <h3 class="quiz-question">以下哪项最符合会话成本的计算方式？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只把顶层输出 token 换算成美元</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按输入/输出/缓存/WebSearch 分类统计，并可递归纳入 advisor 用量</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主要由代码改动行数推导成本</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。预算判定为 `continue` 时，query loop 会注入一条 meta 用户消息并继续迭代。" data-explanation-wrong="续跑路径是显式状态迁移，不会直接报错退出。">
+          <h3 class="quiz-question">token budget 判定为 `continue` 时，query loop 会做什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>追加 `decision.nudgeMessage`（meta 用户消息）并继续循环</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>立即返回 `prompt_too_long`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>清空全部 token 计数器后重启会话</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。`/cost` 关注当前会话状态，`/insights` 关注历史聚合统计。" data-explanation-wrong="两条命令覆盖不同时间尺度，职责是互补关系。">
+          <h3 class="quiz-question">以下哪个组合描述是正确的？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/insights` 只输出当前轮成本</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/cost` 负责跨会话时间分布统计</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/cost` 看当前会话，`/insights` 聚合历史 token/tool 模式</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module9-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module9-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-10">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">10</span>
+      <h1 class="module-title">Memory 设计：持久化、约束与同步</h1>
+      <p class="module-subtitle">Claude Code 的 memory 体系由索引文件、类型化记忆文件、路径安全校验和团队同步组成。目标是稳定召回、可控规模、可验证边界。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">整体结构：索引、类型、召回、同步</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🗂️</div>
+          <h4 class="pattern-title">索引入口</h4>
+          <p class="pattern-desc"><code>MEMORY.md</code> 承担目录索引角色，始终加载到上下文，并受尺寸上限约束。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🏷️</div>
+          <h4 class="pattern-title">类型化文件</h4>
+          <p class="pattern-desc">每条记忆单独成文件，通过 frontmatter 标记类型：<code>user</code>、<code>feedback</code>、<code>project</code>、<code>reference</code>。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🔁</div>
+          <h4 class="pattern-title">团队同步</h4>
+          <p class="pattern-desc">团队记忆按仓库范围同步，采用 pull-first + 校验和增量 push。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">📌</div>
+        <div class="callout-content">
+          <strong class="callout-title">设计原则</strong>
+          <p>memory 只保存无法从当前代码和 git 历史直接推导的信息，避免重复存档与上下文噪音。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">入口索引同时受行数和字节数限制</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/memdir.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const MAX_ENTRYPOINT_LINES = 200</span>
+<span class="code-line">export const MAX_ENTRYPOINT_BYTES = 25_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function truncateEntrypointContent(raw: string): EntrypointTruncation {</span>
+<span class="code-line">  const contentLines = raw.trim().split('\n')</span>
+<span class="code-line">  const wasLineTruncated = contentLines.length &gt; MAX_ENTRYPOINT_LINES</span>
+<span class="code-line">  const wasByteTruncated = raw.trim().length &gt; MAX_ENTRYPOINT_BYTES</span>
+<span class="code-line">  ...</span>
+<span class="code-line">  return {</span>
+<span class="code-line">    content: truncated + '\n\n&gt; WARNING: MEMORY.md is ...',</span>
+<span class="code-line">    wasLineTruncated,</span>
+<span class="code-line">    wasByteTruncated,</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl"><code>MEMORY.md</code> 被定义为紧凑索引，容量有硬上限。</p>
+            <p class="tl">系统分别检查行数和字节数，命中任一上限都触发截断并附带警告信息。</p>
+            <p class="tl">这套机制可以覆盖长行场景，控制提示词体积波动。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">路径解析有明确优先级与安全门</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/paths.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function isAutoMemoryEnabled(): boolean {</span>
+<span class="code-line">  if (isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY)) return false</span>
+<span class="code-line">  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) return false</span>
+<span class="code-line">  ...</span>
+<span class="code-line">  return true</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export const getAutoMemPath = memoize(() =&gt; {</span>
+<span class="code-line">  const override = getAutoMemPathOverride() ?? getAutoMemPathSetting()</span>
+<span class="code-line">  if (override) return override</span>
+<span class="code-line">  return join(getMemoryBaseDir(), 'projects', sanitizePath(getAutoMemBase()), 'memory') + sep</span>
+<span class="code-line">})</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">auto memory 可被环境变量、bare 模式、remote 条件和设置项共同控制。</p>
+            <p class="tl">路径决策顺序固定：环境覆盖、受信设置覆盖、默认项目路径。</p>
+            <p class="tl">路径在落地前会做 normalize 与合法性校验，拦截危险根目录和注入向量。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">可预测</code><span class="badge-desc">同一会话路径规则稳定，便于调试和审计。</span></div>
+        <div class="badge-item"><code class="badge-code">可防护</code><span class="badge-desc">非法路径在写入前被拒绝。</span></div>
+        <div class="badge-item"><code class="badge-code">可移植</code><span class="badge-desc">跨平台路径差异通过统一归一化处理。</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">团队记忆写入采用两阶段路径约束</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/teamMemPaths.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function validateTeamMemKey(relativeKey: string): Promise&lt;string&gt; {</span>
+<span class="code-line">  sanitizePathKey(relativeKey)</span>
+<span class="code-line">  const fullPath = join(getTeamMemPath(), relativeKey)</span>
+<span class="code-line">  const resolvedPath = resolve(fullPath)</span>
+<span class="code-line">  if (!resolvedPath.startsWith(getTeamMemPath())) throw new PathTraversalError(...)</span>
+<span class="code-line">  const realPath = await realpathDeepestExisting(resolvedPath)</span>
+<span class="code-line">  if (!(await isRealPathWithinTeamDir(realPath))) throw new PathTraversalError(...)</span>
+<span class="code-line">  return resolvedPath</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">第一阶段做字符串级拦截：空字节、编码穿越、反斜杠、绝对路径、`..` 逃逸。</p>
+            <p class="tl">第二阶段做真实路径校验：解析最深存在祖先的 realpath，再验证仍位于 team 目录内。</p>
+            <p class="tl">该组合策略覆盖符号链接逃逸和悬挂链接写入风险。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">🛡️</div>
+        <div class="callout-content">
+          <strong class="callout-title">仅靠 resolve 不够</strong>
+          <p>resolve 可以处理 `..`，但无法识别符号链接目标是否越界。realpath 包含校验必须保留。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">召回与同步路径：选择性、去抖、增量上传</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/findRelevantMemories.ts` + `source/claude-code-source/src/services/teamMemorySync/index.ts` + `source/claude-code-source/src/services/teamMemorySync/watcher.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const selectedFilenames = await selectRelevantMemories(query, memories, signal, recentTools)</span>
+<span class="code-line">...</span>
+<span class="code-line">const DEBOUNCE_MS = 2000</span>
+<span class="code-line">function schedulePush(): void {</span>
+<span class="code-line">  if (pushSuppressedReason !== null) return</span>
+<span class="code-line">  hasPendingChanges = true</span>
+<span class="code-line">  debounceTimer = setTimeout(() =&gt; { currentPushPromise = executePush() }, DEBOUNCE_MS)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// delta push: upload only entries whose hash differs from serverChecksums</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">召回阶段先扫描头部信息，再用 side query 选择最多 5 条高相关记忆。</p>
+            <p class="tl">同步阶段先 pull，再监听文件变化，2 秒去抖后执行 push。</p>
+            <p class="tl">上传时按 checksum 计算增量，冲突和永久失败有专门处理分支。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>启动拉取</strong><p>先把服务端 team memory 拉到本地目录。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>文件监听</strong><p>监听本地改动并聚合短时间内的多次写入。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>增量提交</strong><p>仅提交 hash 变化的键，未提交键在服务端保持不变。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>冲突重试</strong><p>出现 ETag 冲突后刷新哈希并重试。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module10-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。行数上限与字节上限共同控制 MEMORY.md 负载，覆盖常规和长行异常场景。" data-explanation-wrong="这里需要双重上限。单一维度无法稳定控制索引体积。">
+          <h3 class="quiz-question">`truncateEntrypointContent` 为什么要同时检查行数和字节数？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了让 Markdown 看起来更整齐</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了限制索引体积并覆盖长行异常</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了禁止单个 memory 文件超过 25KB</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。路径校验包含 realpath containment，专门处理符号链接越界。" data-explanation-wrong="仅做 resolve 前缀检查无法覆盖 symlink 目标跳出目录的情况。">
+          <h3 class="quiz-question">团队记忆写入里，哪一步负责拦截符号链接逃逸？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>resolve 后再做 realpath 包含性校验</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>上传前按文件名排序</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>跳过空文件上传</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。watcher 先去抖，再走按 checksum 的增量上传逻辑。" data-explanation-wrong="系统不会每次事件都全量推送。它会聚合改动并计算增量。">
+          <h3 class="quiz-question">team memory 的推送策略是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>每个写入事件都立即全量上传</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只在会话退出时上传</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>去抖后触发，按 checksum 做增量上传</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module10-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module10-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-11">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">11</span>
+      <h1 class="module-title">Agent 团队与通信系统</h1>
+      <p class="module-subtitle">多代理协作是否稳定，取决于协调协议、消息传输、状态队列和通知回流是否一致。Claude Code 把这些能力都做成了显式运行时结构。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">团队通信属于核心运行时能力</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🎯</div>
+          <h4 class="pattern-title">协调层</h4>
+          <p class="pattern-desc">Coordinator prompt 定义委派、回收结果和验证分工。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">📬</div>
+          <h4 class="pattern-title">传输层</h4>
+          <p class="pattern-desc">队友消息落到 mailbox 文件，使用锁和重试保证并发安全。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧭</div>
+          <h4 class="pattern-title">状态层</h4>
+          <p class="pattern-desc">REPL 与 AppState 维护 worker 权限请求、网络审批、阻塞状态队列。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📡</div>
+          <h4 class="pattern-title">回流层</h4>
+          <p class="pattern-desc">`print.ts` 在 headless 模式继续解析通知并喂回模型回合。</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">协作质量由协议质量决定</strong>
+          <p>消息类型和路由边界不清晰时，常见结果是重复执行、错误恢复慢、上下文回收失败。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Coordinator mode 直接规定团队运行协议</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/coordinator/coordinatorMode.ts`（第 80-109、116-145、204-218 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getCoordinatorUserContext(...) {</span>
+<span class="code-line">  const workerTools = ... Array.from(ASYNC_AGENT_ALLOWED_TOOLS)</span>
+<span class="code-line">    .filter(name =&gt; !INTERNAL_WORKER_TOOLS.has(name))</span>
+<span class="code-line">  let content = `Workers spawned via the ${AGENT_TOOL_NAME} tool ...`</span>
+<span class="code-line">  if (mcpClients.length &gt; 0) { ... }</span>
+<span class="code-line">  if (scratchpadDir &amp;&amp; isScratchpadGateEnabled()) { ... }</span>
+<span class="code-line">  return { workerToolsContext: content }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">Worker results arrive as user-role messages containing</span>
+<span class="code-line">`&lt;task-notification&gt;` XML ...</span>
+<span class="code-line"></span>
+<span class="code-line">| Research | Workers (parallel) | ... |</span>
+<span class="code-line">| Synthesis | You (coordinator) | ... |</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">Coordinator 会把 worker 工具可用范围、MCP 可见性和 scratchpad 信息写进上下文。</p>
+            <p class="tl">worker 产出通过 `&lt;task-notification&gt;` 传回，处理方式是结构化解析并按协议进入协调流程。</p>
+            <p class="tl">默认流程是并行调研、协调者综合、再进入实现和验证。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Mailbox 传输是文件化、可并发的协议通道</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/teammateMailbox.ts`（第 31-41、56-66、134-191、1065-1091 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const LOCK_OPTIONS = { retries: { retries: 10, minTimeout: 5, maxTimeout: 100 } }</span>
+<span class="code-line"></span>
+<span class="code-line">export function getInboxPath(agentName: string, teamName?: string): string {</span>
+<span class="code-line">  const inboxDir = join(getTeamsDir(), safeTeam, 'inboxes')</span>
+<span class="code-line">  return join(inboxDir, `${safeAgentName}.json`)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">release = await lockfile.lock(inboxPath, { lockfilePath, ...LOCK_OPTIONS })</span>
+<span class="code-line">const messages = await readMailbox(recipientName, teamName)</span>
+<span class="code-line">messages.push({ ...message, read: false })</span>
+<span class="code-line">await writeFile(inboxPath, jsonStringify(messages, null, 2), 'utf-8')</span>
+<span class="code-line"></span>
+<span class="code-line">type === 'permission_request' || type === 'sandbox_permission_request' || ...</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">每个代理都有固定 inbox 路径，位于 `.claude/teams/{team}/inboxes/`。</p>
+            <p class="tl">写入流程会先加锁、再重读、再追加并写回，避免并发写覆盖。</p>
+            <p class="tl">协议消息类型会被识别并分发到专用处理器，不会作为原始文本混入模型上下文。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">传输层稳定性直接影响推理稳定性</strong>
+          <p>消息竞态或错误路由会导致 worker 协作链断裂，后续决策质量会明显下降。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">权限请求通过 leader 做中继与裁决</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/screens/REPL.tsx`（第 2216-2248、4672-4719 行）+ `source/claude-code-source/src/utils/swarm/permissionSync.ts`（第 8-18、805-918 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (isAgentSwarmsEnabled() &amp;&amp; isSwarmWorker()) {</span>
+<span class="code-line">  const requestId = generateSandboxRequestId()</span>
+<span class="code-line">  const sent = await sendSandboxPermissionRequestViaMailbox(hostPattern.host, requestId)</span>
+<span class="code-line">  registerSandboxPermissionCallback({ requestId, host, resolve })</span>
+<span class="code-line">  setAppState(...pendingSandboxRequest...)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">focusedInputDialog === 'worker-sandbox-permission' ...</span>
+<span class="code-line">sendSandboxPermissionResponseViaMailbox(workerName, requestId, host, allow, teamName)</span>
+<span class="code-line">setAppState(...workerSandboxPermissions.queue.slice(1))</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">worker 触发受限网络访问时，会把请求发给 leader，不会本地直接批准。</p>
+            <p class="tl">leader UI 从队列读取请求，用户批准后再通过 mailbox 返回响应。</p>
+            <p class="tl">worker 和 leader 两侧都有显式 pending 状态，阻塞原因对用户可见。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Mailbox 群聊模式</h2>
+      <div class="chat-window animate-in" id="chat-module11-zh">
+        <div class="chat-messages">
+          <div class="chat-message" data-msg="0" data-sender="a" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-1)">工</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-1)">Worker</span><p>发送 `sandbox_permission_request`，包含 requestId 与目标 host。</p></div></div>
+          <div class="chat-message" data-msg="1" data-sender="b" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-2)">领</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-2)">Leader REPL</span><p>请求进入 `workerSandboxPermissions.queue`，弹出审批对话。</p></div></div>
+          <div class="chat-message" data-msg="2" data-sender="c" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-3)">领</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-3)">Leader</span><p>审批结果以 `sandbox_permission_response` 通过 mailbox 返回。</p></div></div>
+          <div class="chat-message" data-msg="3" data-sender="d" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-4)">工</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-4)">Worker</span><p>pending 状态清除，继续执行之前阻塞的工具调用。</p></div></div>
+          <div class="chat-message" data-msg="4" data-sender="e" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-5)">协</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-5)">Coordinator</span><p>最终结果以 `&lt;task-notification&gt;` 进入下一轮综合决策。</p></div></div>
+        </div>
+        <div class="chat-typing" id="chat-module11-zh-typing" style="display:none">
+          <div class="chat-avatar" id="chat-module11-zh-typing-avatar">?</div><div class="chat-typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>
+        </div>
+        <div class="chat-controls"><button class="btn chat-next-btn">下一条</button><button class="btn chat-all-btn">播放全部</button><button class="btn chat-reset-btn">重播</button><span class="chat-progress"></span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">启动快照与 headless 轮询保证协作一致性</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/setup.ts`（第 104-109、365-368 行）+ `source/claude-code-source/src/main.tsx`（第 3030-3035 行）+ `source/claude-code-source/src/utils/swarm/reconnection.ts`（第 16-25、57-65 行）+ `source/claude-code-source/src/state/AppStateStore.ts`（第 323-384 行）+ `source/claude-code-source/src/cli/print.ts`（第 2010-2093、2497-2612 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">captureTeammateModeSnapshot()</span>
+<span class="code-line">startTeamMemoryWatcher()</span>
+<span class="code-line">teamContext: assistantTeamContext ?? computeInitialTeamContext?.()</span>
+<span class="code-line">teamContext: { teamName, leadAgentId, selfAgentName, teammates: {} }</span>
+<span class="code-line">workerSandboxPermissions.queue / pendingWorkerRequest / pendingSandboxRequest</span>
+<span class="code-line"></span>
+<span class="code-line">if (command.mode === 'task-notification') { ... parse XML ... }</span>
+<span class="code-line">const unread = await readUnreadMessages('team-lead', teamName)</span>
+<span class="code-line">enqueue({ mode: 'prompt', value: formattedTeammateXml })</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">会话启动阶段会固定 teammate 模式，并启动 team memory watcher，减少运行期漂移。</p>
+            <p class="tl">`teamContext` 和 worker 审批队列是全局状态的一部分，跨回合可追踪。</p>
+            <p class="tl">headless 模式同样会解析 task-notification 和未读 mailbox 消息，再回灌到模型循环。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">状态面</code><span class="badge-desc">`AppStateStore` 中的 teamContext、inbox、worker 审批队列</span></div>
+        <div class="badge-item"><code class="badge-code">传输面</code><span class="badge-desc">mailbox JSON + lock + 协议化 message type</span></div>
+        <div class="badge-item"><code class="badge-code">执行面</code><span class="badge-desc">REPL 与 print.ts 都会把团队消息回送到下一轮推理</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module11-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。Coordinator 模式下，worker 结果通过 `&lt;task-notification&gt;` 结构化传入，需要解析后综合。" data-explanation-wrong="worker 完成信号属于结构化通知，应按协议解析后综合。">
+          <h3 class="quiz-question">Coordinator 模式下，worker 完成消息应如何处理？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>当作普通用户闲聊，直接回复</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按 `&lt;task-notification&gt;` 结构化信号解析并综合</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>仅作为插件事件记录</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。mailbox 写入通过 lockfile 串行化，并带重试机制。" data-explanation-wrong="并发写保护依赖锁和重读追加流程。">
+          <h3 class="quiz-question">mailbox 写入避免竞态的关键机制是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按时间戳排序后覆盖写入</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>强制所有 worker 串行运行</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>lockfile 串行化 + 重试 + 读后追加写回</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。worker 会把请求发给 leader，等待 mailbox 响应后继续执行。" data-explanation-wrong="swarm worker 不会直接自批准受限网络访问。">
+          <h3 class="quiz-question">swarm worker 需要受限网络访问时，标准路径是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>通过 mailbox 发给 leader 审批，再依据响应继续</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>worker 端自动批准并继续</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>静默丢弃调用，不反馈状态</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module11-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module11-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="module" id="module-12">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">12</span>
+      <h1 class="module-title">主动模式、后台会话与定时代理</h1>
+      <p class="module-subtitle">Claude Code 的自治执行有三条主路径：proactive tick、后台主会话任务、cron 定时任务。它们共用消息队列，并用 agent 作用域做精确路由。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先建立执行模型：三种自治回路</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">⏱️</div>
+          <h4 class="pattern-title">Proactive Tick 回路</h4>
+          <p class="pattern-desc">在队列空闲时注入隐藏 `&lt;tick&gt;` prompt，让模型持续推进任务。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧵</div>
+          <h4 class="pattern-title">后台主会话任务</h4>
+          <p class="pattern-desc">把当前主线程查询转成后台任务，前台继续可交互，输出写入独立 sidechain transcript。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🗓️</div>
+          <h4 class="pattern-title">Cron 定时任务</h4>
+          <p class="pattern-desc">从 `.claude/scheduled_tasks.json` 触发 prompt，进入 `later` 优先级队列，按 agentId 分发。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">工程关注点</strong>
+          <p>核心是队列可见性、任务归属、执行隔离。自治能力上线前，先验证这三项。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Proactive 在工具解析前激活，空闲时自动补 tick</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（1864-1868, 2197-2204）与 `source/claude-code-source/src/cli/print.ts`（1831-1854, 2475-2483）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// main.tsx</span>
+<span class="code-line">maybeActivateProactive(options)</span>
+<span class="code-line">let tools = getTools(toolPermissionContext)</span>
+<span class="code-line">...</span>
+<span class="code-line">if ((options.proactive || isEnvTruthy(process.env.CLAUDE_CODE_PROACTIVE)) && !coordinatorModeModule?.isCoordinatorMode()) {</span>
+<span class="code-line">  const proactivePrompt = `... You will receive periodic &lt;tick&gt; prompts ...`</span>
+<span class="code-line">  appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${proactivePrompt}` : proactivePrompt</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// print.ts</span>
+<span class="code-line">if (proactiveModule?.isProactiveActive() && !proactiveModule.isProactivePaused()) {</span>
+<span class="code-line">  if (peek(isMainThread) === undefined && !inputClosed) scheduleProactiveTick!()</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">激活顺序有依赖关系：先进入 proactive，再构建工具集，才能让依赖 proactive 状态的工具被纳入本轮。</p>
+            <p class="tl">tick 注入有触发条件：proactive 打开、未暂停、主队列空闲、输入未关闭。</p>
+            <p class="tl">coordinator 模式有独立提示词和工具过滤，主动模式提示不会覆盖这套规则。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">REPL 挂载定时器，按 agent 归属路由任务</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/screens/REPL.tsx`（4045-4059），`source/claude-code-source/src/hooks/useScheduledTasks.ts`（84-119），`source/claude-code-source/src/query.ts`（1560-1577）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// REPL.tsx</span>
+<span class="code-line">if (feature('AGENT_TRIGGERS')) {</span>
+<span class="code-line">  useScheduledTasks!({ isLoading, assistantMode, setMessages })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// useScheduledTasks.ts</span>
+<span class="code-line">onFireTask: task =&gt; {</span>
+<span class="code-line">  if (task.agentId) injectUserMessageToTeammate(...)</span>
+<span class="code-line">  else enqueuePendingNotification({ mode: 'prompt', priority: 'later', isMeta: true, workload: WORKLOAD_CRON })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// query.ts</span>
+<span class="code-line">if (isMainThread) return cmd.agentId === undefined</span>
+<span class="code-line">return cmd.mode === 'task-notification' &amp;&amp; cmd.agentId === currentAgentId</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">定时任务有两条通路：带 `agentId` 的任务推给对应 teammate；无 `agentId` 的任务进入主线程队列。</p>
+            <p class="tl">子代理只能消费发给自己的 `task-notification`，用户 prompt 固定走主线程。</p>
+            <p class="tl">`isMeta: true` 避免系统自动触发消息污染常规会话视图。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">后台主会话任务使用独立 transcript 与 agent 上下文</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/tasks/LocalMainSessionTask.ts`（102-110, 127-142, 357-376）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">void initTaskOutputAsSymlink(taskId, getAgentTranscriptPath(asAgentId(taskId)))</span>
+<span class="code-line">...</span>
+<span class="code-line">const taskState: LocalMainSessionTaskState = {</span>
+<span class="code-line">  type: 'local_agent',</span>
+<span class="code-line">  agentId: taskId,</span>
+<span class="code-line">  agentType: 'main-session',</span>
+<span class="code-line">  isBackgrounded: true,</span>
+<span class="code-line">}</span>
+<span class="code-line">...</span>
+<span class="code-line">const agentContext: SubagentContext = { agentId: taskId, agentType: 'subagent', subagentName: 'main-session' }</span>
+<span class="code-line">void runWithAgentContext(agentContext, async () =&gt; { ...query(...) })</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">后台查询写入独立 transcript，避免和前台主会话文件发生状态冲突。</p>
+            <p class="tl">任务对象带固定 `agentId`，可以被任务系统追踪、通知、恢复。</p>
+            <p class="tl">执行时挂载 subagent 上下文，技能调用和队列分发都有明确作用域。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">本地 cron 与远程定时代理是两套执行面</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/agentSdkTypes.ts`（280-355），`source/claude-code-source/src/cli/print.ts`（2696-2733），`source/claude-code-source/src/skills/bundled/scheduleRemoteAgents.ts`（176-193, 326-335）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// agentSdkTypes.ts</span>
+<span class="code-line">type ScheduledTaskEvent = { type: 'fire'; task: CronTask } | { type: 'missed'; tasks: CronTask[] }</span>
+<span class="code-line">function watchScheduledTasks({ dir, signal, getJitterConfig }): ScheduledTasksHandle</span>
+<span class="code-line"></span>
+<span class="code-line">// print.ts</span>
+<span class="code-line">createCronScheduler({ onFire: prompt =&gt; enqueue({ mode: 'prompt', priority: 'later', isMeta: true, workload: WORKLOAD_CRON }) })</span>
+<span class="code-line"></span>
+<span class="code-line">// scheduleRemoteAgents.ts</span>
+<span class="code-line">name: 'schedule'</span>
+<span class="code-line">description: 'Create, update, list, or run scheduled remote agents ...'</span>
+<span class="code-line">isEnabled: () =&gt; ... &amp;&amp; isPolicyAllowed('allow_remote_sessions')</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">本地定时任务依赖本地文件和进程内 scheduler，事件类型包含 `fire` 与 `missed`。</p>
+            <p class="tl">远程定时代理通过 `/schedule` 技能驱动云端 trigger API，受远程会话策略控制。</p>
+            <p class="tl">排障时先判断任务属于本地链路还是远程链路，再选日志和配置入口。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>先看触发来源</strong><p>`.claude/scheduled_tasks.json` 是本地链路，`/schedule` 是远程链路。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>再看运行环境</strong><p>本地进程队列执行，或云端隔离环境执行。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>最后看权限边界</strong><p>本地看队列/任务状态，远程看账号、环境、连接器和策略。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module12-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。先激活 proactive，工具集里才能包含依赖 proactive 状态的工具。" data-explanation-wrong="工具集构建依赖 proactive 状态，顺序放反会导致工具缺失。">
+          <h3 class="quiz-question">为什么 proactive 激活要放在 `getTools()` 之前？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了跳过命令加载</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了让依赖 proactive 状态的工具进入首轮工具集</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了强制进入 coordinator 模式</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。子代理只消费发给自己的 task-notification，不消费主线程用户 prompt。" data-explanation-wrong="`query.ts` 对主线程和子代理做了不同过滤条件，按 agentId 隔离。">
+          <h3 class="quiz-question">队列如何防止子代理拿到主线程用户消息？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>子代理只接收 `mode: 'task-notification'` 且 `agentId` 匹配的命令</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>存在子代理时停止所有队列消费</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>把所有 prompt 改写成 slash 命令</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。远程 trigger 走云端 API；本地 cron 走进程内 scheduler 与本地任务文件。" data-explanation-wrong="两条链路的配置位置、运行位置、权限入口都不同。">
+          <h3 class="quiz-question">`/schedule` 远程定时代理与本地定时任务的关系，哪项描述正确？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>同一套 scheduler，只是 UI 名称不同</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>远程 trigger 先读取本地 `.claude/scheduled_tasks.json`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>远程 trigger 是云端作业，本地定时任务是本地进程内事件</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module12-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module12-zh')">重新作答</button>
       </div>
     </div>
   </div>

@@ -1,0 +1,204 @@
+<section class="module" id="module-10">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">10</span>
+      <h1 class="module-title">Memory 设计：持久化、约束与同步</h1>
+      <p class="module-subtitle">Claude Code 的 memory 体系由索引文件、类型化记忆文件、路径安全校验和团队同步组成。目标是稳定召回、可控规模、可验证边界。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">整体结构：索引、类型、召回、同步</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🗂️</div>
+          <h4 class="pattern-title">索引入口</h4>
+          <p class="pattern-desc"><code>MEMORY.md</code> 承担目录索引角色，始终加载到上下文，并受尺寸上限约束。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🏷️</div>
+          <h4 class="pattern-title">类型化文件</h4>
+          <p class="pattern-desc">每条记忆单独成文件，通过 frontmatter 标记类型：<code>user</code>、<code>feedback</code>、<code>project</code>、<code>reference</code>。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🔁</div>
+          <h4 class="pattern-title">团队同步</h4>
+          <p class="pattern-desc">团队记忆按仓库范围同步，采用 pull-first + 校验和增量 push。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">📌</div>
+        <div class="callout-content">
+          <strong class="callout-title">设计原则</strong>
+          <p>memory 只保存无法从当前代码和 git 历史直接推导的信息，避免重复存档与上下文噪音。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">入口索引同时受行数和字节数限制</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/memdir.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const MAX_ENTRYPOINT_LINES = 200</span>
+<span class="code-line">export const MAX_ENTRYPOINT_BYTES = 25_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function truncateEntrypointContent(raw: string): EntrypointTruncation {</span>
+<span class="code-line">  const contentLines = raw.trim().split('\n')</span>
+<span class="code-line">  const wasLineTruncated = contentLines.length &gt; MAX_ENTRYPOINT_LINES</span>
+<span class="code-line">  const wasByteTruncated = raw.trim().length &gt; MAX_ENTRYPOINT_BYTES</span>
+<span class="code-line">  ...</span>
+<span class="code-line">  return {</span>
+<span class="code-line">    content: truncated + '\n\n&gt; WARNING: MEMORY.md is ...',</span>
+<span class="code-line">    wasLineTruncated,</span>
+<span class="code-line">    wasByteTruncated,</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl"><code>MEMORY.md</code> 被定义为紧凑索引，容量有硬上限。</p>
+            <p class="tl">系统分别检查行数和字节数，命中任一上限都触发截断并附带警告信息。</p>
+            <p class="tl">这套机制可以覆盖长行场景，控制提示词体积波动。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">路径解析有明确优先级与安全门</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/paths.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function isAutoMemoryEnabled(): boolean {</span>
+<span class="code-line">  if (isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY)) return false</span>
+<span class="code-line">  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) return false</span>
+<span class="code-line">  ...</span>
+<span class="code-line">  return true</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export const getAutoMemPath = memoize(() =&gt; {</span>
+<span class="code-line">  const override = getAutoMemPathOverride() ?? getAutoMemPathSetting()</span>
+<span class="code-line">  if (override) return override</span>
+<span class="code-line">  return join(getMemoryBaseDir(), 'projects', sanitizePath(getAutoMemBase()), 'memory') + sep</span>
+<span class="code-line">})</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">auto memory 可被环境变量、bare 模式、remote 条件和设置项共同控制。</p>
+            <p class="tl">路径决策顺序固定：环境覆盖、受信设置覆盖、默认项目路径。</p>
+            <p class="tl">路径在落地前会做 normalize 与合法性校验，拦截危险根目录和注入向量。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">可预测</code><span class="badge-desc">同一会话路径规则稳定，便于调试和审计。</span></div>
+        <div class="badge-item"><code class="badge-code">可防护</code><span class="badge-desc">非法路径在写入前被拒绝。</span></div>
+        <div class="badge-item"><code class="badge-code">可移植</code><span class="badge-desc">跨平台路径差异通过统一归一化处理。</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">团队记忆写入采用两阶段路径约束</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/teamMemPaths.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function validateTeamMemKey(relativeKey: string): Promise&lt;string&gt; {</span>
+<span class="code-line">  sanitizePathKey(relativeKey)</span>
+<span class="code-line">  const fullPath = join(getTeamMemPath(), relativeKey)</span>
+<span class="code-line">  const resolvedPath = resolve(fullPath)</span>
+<span class="code-line">  if (!resolvedPath.startsWith(getTeamMemPath())) throw new PathTraversalError(...)</span>
+<span class="code-line">  const realPath = await realpathDeepestExisting(resolvedPath)</span>
+<span class="code-line">  if (!(await isRealPathWithinTeamDir(realPath))) throw new PathTraversalError(...)</span>
+<span class="code-line">  return resolvedPath</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">第一阶段做字符串级拦截：空字节、编码穿越、反斜杠、绝对路径、`..` 逃逸。</p>
+            <p class="tl">第二阶段做真实路径校验：解析最深存在祖先的 realpath，再验证仍位于 team 目录内。</p>
+            <p class="tl">该组合策略覆盖符号链接逃逸和悬挂链接写入风险。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">🛡️</div>
+        <div class="callout-content">
+          <strong class="callout-title">仅靠 resolve 不够</strong>
+          <p>resolve 可以处理 `..`，但无法识别符号链接目标是否越界。realpath 包含校验必须保留。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">召回与同步路径：选择性、去抖、增量上传</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/findRelevantMemories.ts` + `source/claude-code-source/src/services/teamMemorySync/index.ts` + `source/claude-code-source/src/services/teamMemorySync/watcher.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const selectedFilenames = await selectRelevantMemories(query, memories, signal, recentTools)</span>
+<span class="code-line">...</span>
+<span class="code-line">const DEBOUNCE_MS = 2000</span>
+<span class="code-line">function schedulePush(): void {</span>
+<span class="code-line">  if (pushSuppressedReason !== null) return</span>
+<span class="code-line">  hasPendingChanges = true</span>
+<span class="code-line">  debounceTimer = setTimeout(() =&gt; { currentPushPromise = executePush() }, DEBOUNCE_MS)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// delta push: upload only entries whose hash differs from serverChecksums</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">召回阶段先扫描头部信息，再用 side query 选择最多 5 条高相关记忆。</p>
+            <p class="tl">同步阶段先 pull，再监听文件变化，2 秒去抖后执行 push。</p>
+            <p class="tl">上传时按 checksum 计算增量，冲突和永久失败有专门处理分支。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>启动拉取</strong><p>先把服务端 team memory 拉到本地目录。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>文件监听</strong><p>监听本地改动并聚合短时间内的多次写入。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>增量提交</strong><p>仅提交 hash 变化的键，未提交键在服务端保持不变。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>冲突重试</strong><p>出现 ETag 冲突后刷新哈希并重试。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module10-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。行数上限与字节上限共同控制 MEMORY.md 负载，覆盖常规和长行异常场景。" data-explanation-wrong="这里需要双重上限。单一维度无法稳定控制索引体积。">
+          <h3 class="quiz-question">`truncateEntrypointContent` 为什么要同时检查行数和字节数？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了让 Markdown 看起来更整齐</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了限制索引体积并覆盖长行异常</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了禁止单个 memory 文件超过 25KB</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。路径校验包含 realpath containment，专门处理符号链接越界。" data-explanation-wrong="仅做 resolve 前缀检查无法覆盖 symlink 目标跳出目录的情况。">
+          <h3 class="quiz-question">团队记忆写入里，哪一步负责拦截符号链接逃逸？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>resolve 后再做 realpath 包含性校验</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>上传前按文件名排序</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>跳过空文件上传</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。watcher 先去抖，再走按 checksum 的增量上传逻辑。" data-explanation-wrong="系统不会每次事件都全量推送。它会聚合改动并计算增量。">
+          <h3 class="quiz-question">team memory 的推送策略是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>每个写入事件都立即全量上传</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只在会话退出时上传</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>去抖后触发，按 checksum 做增量上传</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module10-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module10-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

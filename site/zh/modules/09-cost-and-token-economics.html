@@ -1,0 +1,258 @@
+<section class="module" id="module-9">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">09</span>
+      <h1 class="module-title">成本与 Token 经济学</h1>
+      <p class="module-subtitle">Claude Code 把成本、Token、上下文压力拆成独立账本。看懂这些账本的计算位置，才能做稳定的预算和运行策略。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">一个会话会同时更新多套经济指标</h2>
+      <p class="animate-in">同一轮响应可以同时影响美元成本、Token 分类计数、时延指标、代码改动规模。成本治理是系统问题，单看一个数字会丢失关键信号。</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">💵</div>
+          <h4 class="pattern-title">计费账本</h4>
+          <p class="pattern-desc">累计 `totalCostUSD` 和按模型拆分的 USD，再统一格式化输出。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧮</div>
+          <h4 class="pattern-title">Token 账本</h4>
+          <p class="pattern-desc">输入、输出、cache read、cache creation、web search 请求分别统计。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📏</div>
+          <h4 class="pattern-title">运行账本</h4>
+          <p class="pattern-desc">API 时长、墙钟时长、代码增删行、工具信号按会话持久化。</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">⚙️</div>
+        <div class="callout-content">
+          <strong class="callout-title">同一条响应会联动多账本</strong>
+          <p>当响应里既有 token usage 又有 tool 行为时，成本、预算压力、代码行为统计会一起变化。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">会话成本累加按 Token 类型细分</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cost-tracker.ts`（第 266-322 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">modelUsage.inputTokens += usage.input_tokens</span>
+<span class="code-line">modelUsage.outputTokens += usage.output_tokens</span>
+<span class="code-line">modelUsage.cacheReadInputTokens += usage.cache_read_input_tokens ?? 0</span>
+<span class="code-line">modelUsage.cacheCreationInputTokens += usage.cache_creation_input_tokens ?? 0</span>
+<span class="code-line">modelUsage.webSearchRequests += usage.server_tool_use?.web_search_requests ?? 0</span>
+<span class="code-line">modelUsage.costUSD += cost</span>
+<span class="code-line"></span>
+<span class="code-line">getCostCounter()?.add(cost, attrs)</span>
+<span class="code-line">getTokenCounter()?.add(usage.input_tokens, { ...attrs, type: 'input' })</span>
+<span class="code-line">getTokenCounter()?.add(usage.output_tokens, { ...attrs, type: 'output' })</span>
+<span class="code-line"></span>
+<span class="code-line">for (const advisorUsage of getAdvisorUsage(usage)) {</span>
+<span class="code-line">  const advisorCost = calculateUSDCost(advisorUsage.model, advisorUsage)</span>
+<span class="code-line">  totalCost += addToTotalSessionCost(advisorCost, advisorUsage, advisorUsage.model)</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">成本计算采用分类记账，覆盖总量和分类维度。</p>
+            <p class="tl">输入、输出、缓存读写、WebSearch 都有独立计数器。</p>
+            <p class="tl">advisor 产生的嵌套用量会递归计入总成本。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">按模型聚合</code><span class="badge-desc">终端摘要会按模型短名显示 usage 和 cost。</span></div>
+        <div class="badge-item"><code class="badge-code">Fast 标记</code><span class="badge-desc">开启 fast 模式时，指标会附带 `speed: 'fast'` 属性。</span></div>
+        <div class="badge-item"><code class="badge-code">未知模型告警</code><span class="badge-desc">`formatTotalCost()` 可标记“成本可能不准确”。</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">成本状态按会话 ID 持久化和恢复</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cost-tracker.ts`（第 87-175 行），`source/claude-code-source/src/costHook.ts`（第 6-21 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (projectConfig.lastSessionId !== sessionId) {</span>
+<span class="code-line">  return undefined</span>
+<span class="code-line">}</span>
+<span class="code-line">...</span>
+<span class="code-line">saveCurrentProjectConfig(current =&gt; ({</span>
+<span class="code-line">  ...current,</span>
+<span class="code-line">  lastCost: getTotalCostUSD(),</span>
+<span class="code-line">  lastTotalInputTokens: getTotalInputTokens(),</span>
+<span class="code-line">  lastTotalOutputTokens: getTotalOutputTokens(),</span>
+<span class="code-line">  lastSessionId: getSessionId(),</span>
+<span class="code-line">}))</span>
+<span class="code-line"></span>
+<span class="code-line">if (hasConsoleBillingAccess()) {</span>
+<span class="code-line">  process.stdout.write('\\n' + formatTotalCost() + '\\n')</span>
+<span class="code-line">}</span>
+<span class="code-line">saveCurrentSessionCosts(getFpsMetrics?.())</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">恢复逻辑先校验 session id，一致才会回填历史成本状态。</p>
+            <p class="tl">进程退出时会保存当前会话快照；有控制台账单权限才打印详细成本摘要。</p>
+            <p class="tl">这样可以保证续跑连续性，同时控制成本信息展示范围。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>写入快照</strong><p>保存成本、token、模型用量、时长、代码增删行等字段。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>绑定会话</strong><p>记录 `lastSessionId`，跨会话恢复直接拒绝。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>恢复时补元数据</strong><p>模型用量恢复时补上 context window 和 max output tokens 信息。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Token 预算续跑包含明确解析器和停止条件</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/tokenBudget.ts`（第 3-29、66-72 行），`source/claude-code-source/src/query/tokenBudget.ts`（第 3-93 行），`source/claude-code-source/src/query.ts`（第 1308-1354 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const SHORTHAND_START_RE = /^\\s*\\+(\\d+(?:\\.\\d+)?)\\s*(k|m|b)\\b/i</span>
+<span class="code-line">const VERBOSE_RE = /\\b(?:use|spend)\\s+(\\d+(?:\\.\\d+)?)\\s*(k|m|b)\\s*tokens?\\b/i</span>
+<span class="code-line">...</span>
+<span class="code-line">if (!isDiminishing &amp;&amp; turnTokens &lt; budget * 0.9) {</span>
+<span class="code-line">  return { action: 'continue', nudgeMessage: getBudgetContinuationMessage(...) }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if (decision.action === 'continue') {</span>
+<span class="code-line">  state = {</span>
+<span class="code-line">    ...state,</span>
+<span class="code-line">    messages: [...messagesForQuery, ...assistantMessages, createUserMessage({ content: decision.nudgeMessage, isMeta: true })],</span>
+<span class="code-line">    transition: { reason: 'token_budget_continuation' },</span>
+<span class="code-line">  }</span>
+<span class="code-line">  continue</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">预算语法支持 `+500k` 这类短写，也支持 “use/spend 2m tokens” 这类长写。</p>
+            <p class="tl">在预算 90% 以内且未触发边际收益衰减时，系统会自动续跑。</p>
+            <p class="tl">续跑通过一条 `isMeta` 的用户消息注入，不需要用户再发一轮输入。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧷</div>
+        <div class="callout-content">
+          <strong class="callout-title">`task_budget` 与 `+500k` 是两套机制</strong>
+          <p>`QueryParams` 注释明确区分 API `taskBudget` 和本地 token-budget 续跑（`source/claude-code-source/src/query.ts` 第 193-197 行）。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">不同 Token 函数服务不同语义场景</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/tokens.ts`（第 46-53、79-112、226-260 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getTokenCountFromUsage(usage: Usage): number {</span>
+<span class="code-line">  return usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + usage.output_tokens</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function finalContextTokensFromLastResponse(messages: Message[]): number {</span>
+<span class="code-line">  // input + output from final iteration; excludes cache tokens</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function tokenCountWithEstimation(messages: readonly Message[]): number {</span>
+<span class="code-line">  // canonical threshold metric: usage + rough estimate of trailing messages</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">有的函数把 cache token 计入总量，有的函数按预算公式排除 cache，语义目标不同。</p>
+            <p class="tl">`tokenCountWithEstimation()` 是阈值判断主函数，组合了“最近 usage + 后续消息估算”。</p>
+            <p class="tl">选错函数会直接导致 compact 或预算判断偏离真实上下文压力。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">`getTokenCountFromUsage`</code><span class="badge-desc">输入+输出+缓存读写总和。</span></div>
+        <div class="badge-item"><code class="badge-code">`finalContextTokensFromLastResponse`</code><span class="badge-desc">用于 task_budget 剩余额度语义，排除 cache。</span></div>
+        <div class="badge-item"><code class="badge-code">`tokenCountWithEstimation`</code><span class="badge-desc">用于阈值控制，覆盖 split assistant record 场景。</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">运维可见性：`/cost` 与 `/insights` 负责不同时间尺度</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/commands/cost/cost.ts`（第 6-24 行），`source/claude-code-source/src/commands/insights.ts`（第 525-533、538-550、1145-1225 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// /cost</span>
+<span class="code-line">if (isClaudeAISubscriber()) {</span>
+<span class="code-line">  if (currentLimits.isUsingOverage) { ... } else { ... }</span>
+<span class="code-line">  return { type: 'text', value }</span>
+<span class="code-line">}</span>
+<span class="code-line">return { type: 'text', value: formatTotalCost() }</span>
+<span class="code-line"></span>
+<span class="code-line">// /insights extraction + aggregation</span>
+<span class="code-line">if (usage) {</span>
+<span class="code-line">  inputTokens += usage.input_tokens || 0</span>
+<span class="code-line">  outputTokens += usage.output_tokens || 0</span>
+<span class="code-line">}</span>
+<span class="code-line">if (toolName === 'WebSearch') usesWebSearch = true</span>
+<span class="code-line">...</span>
+<span class="code-line">result.total_input_tokens += session.input_tokens</span>
+<span class="code-line">result.total_output_tokens += session.output_tokens</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`/cost` 提供当前会话的即时状态输出，同时区分订阅和 overage 提示文案。</p>
+            <p class="tl">`/insights` 读取历史会话日志，抽取 token/tool/edit 特征并跨会话聚合。</p>
+            <p class="tl">两者组合后，既能看当下运行成本，也能看长期使用模式。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module9-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`addToTotalSessionCost` 会递归纳入 advisor usage。嵌套模型调用也会进入总成本。" data-explanation-wrong="代码里存在 advisor usage 的递归累加逻辑，总成本会覆盖顶层与嵌套调用。">
+          <h3 class="quiz-question">以下哪项最符合会话成本的计算方式？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只把顶层输出 token 换算成美元</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按输入/输出/缓存/WebSearch 分类统计，并可递归纳入 advisor 用量</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>主要由代码改动行数推导成本</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。预算判定为 `continue` 时，query loop 会注入一条 meta 用户消息并继续迭代。" data-explanation-wrong="续跑路径是显式状态迁移，不会直接报错退出。">
+          <h3 class="quiz-question">token budget 判定为 `continue` 时，query loop 会做什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>追加 `decision.nudgeMessage`（meta 用户消息）并继续循环</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>立即返回 `prompt_too_long`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>清空全部 token 计数器后重启会话</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。`/cost` 关注当前会话状态，`/insights` 关注历史聚合统计。" data-explanation-wrong="两条命令覆盖不同时间尺度，职责是互补关系。">
+          <h3 class="quiz-question">以下哪个组合描述是正确的？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/insights` 只输出当前轮成本</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/cost` 负责跨会话时间分布统计</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/cost` 看当前会话，`/insights` 聚合历史 token/tool 模式</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module9-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module9-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

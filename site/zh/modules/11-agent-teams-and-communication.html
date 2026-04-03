@@ -1,0 +1,221 @@
+<section class="module" id="module-11">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">11</span>
+      <h1 class="module-title">Agent 团队与通信系统</h1>
+      <p class="module-subtitle">多代理协作是否稳定，取决于协调协议、消息传输、状态队列和通知回流是否一致。Claude Code 把这些能力都做成了显式运行时结构。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">团队通信属于核心运行时能力</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🎯</div>
+          <h4 class="pattern-title">协调层</h4>
+          <p class="pattern-desc">Coordinator prompt 定义委派、回收结果和验证分工。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">📬</div>
+          <h4 class="pattern-title">传输层</h4>
+          <p class="pattern-desc">队友消息落到 mailbox 文件，使用锁和重试保证并发安全。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧭</div>
+          <h4 class="pattern-title">状态层</h4>
+          <p class="pattern-desc">REPL 与 AppState 维护 worker 权限请求、网络审批、阻塞状态队列。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📡</div>
+          <h4 class="pattern-title">回流层</h4>
+          <p class="pattern-desc">`print.ts` 在 headless 模式继续解析通知并喂回模型回合。</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">💡</div>
+        <div class="callout-content">
+          <strong class="callout-title">协作质量由协议质量决定</strong>
+          <p>消息类型和路由边界不清晰时，常见结果是重复执行、错误恢复慢、上下文回收失败。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Coordinator mode 直接规定团队运行协议</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/coordinator/coordinatorMode.ts`（第 80-109、116-145、204-218 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getCoordinatorUserContext(...) {</span>
+<span class="code-line">  const workerTools = ... Array.from(ASYNC_AGENT_ALLOWED_TOOLS)</span>
+<span class="code-line">    .filter(name =&gt; !INTERNAL_WORKER_TOOLS.has(name))</span>
+<span class="code-line">  let content = `Workers spawned via the ${AGENT_TOOL_NAME} tool ...`</span>
+<span class="code-line">  if (mcpClients.length &gt; 0) { ... }</span>
+<span class="code-line">  if (scratchpadDir &amp;&amp; isScratchpadGateEnabled()) { ... }</span>
+<span class="code-line">  return { workerToolsContext: content }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">Worker results arrive as user-role messages containing</span>
+<span class="code-line">`&lt;task-notification&gt;` XML ...</span>
+<span class="code-line"></span>
+<span class="code-line">| Research | Workers (parallel) | ... |</span>
+<span class="code-line">| Synthesis | You (coordinator) | ... |</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">Coordinator 会把 worker 工具可用范围、MCP 可见性和 scratchpad 信息写进上下文。</p>
+            <p class="tl">worker 产出通过 `&lt;task-notification&gt;` 传回，处理方式是结构化解析并按协议进入协调流程。</p>
+            <p class="tl">默认流程是并行调研、协调者综合、再进入实现和验证。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Mailbox 传输是文件化、可并发的协议通道</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/teammateMailbox.ts`（第 31-41、56-66、134-191、1065-1091 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const LOCK_OPTIONS = { retries: { retries: 10, minTimeout: 5, maxTimeout: 100 } }</span>
+<span class="code-line"></span>
+<span class="code-line">export function getInboxPath(agentName: string, teamName?: string): string {</span>
+<span class="code-line">  const inboxDir = join(getTeamsDir(), safeTeam, 'inboxes')</span>
+<span class="code-line">  return join(inboxDir, `${safeAgentName}.json`)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">release = await lockfile.lock(inboxPath, { lockfilePath, ...LOCK_OPTIONS })</span>
+<span class="code-line">const messages = await readMailbox(recipientName, teamName)</span>
+<span class="code-line">messages.push({ ...message, read: false })</span>
+<span class="code-line">await writeFile(inboxPath, jsonStringify(messages, null, 2), 'utf-8')</span>
+<span class="code-line"></span>
+<span class="code-line">type === 'permission_request' || type === 'sandbox_permission_request' || ...</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">每个代理都有固定 inbox 路径，位于 `.claude/teams/{team}/inboxes/`。</p>
+            <p class="tl">写入流程会先加锁、再重读、再追加并写回，避免并发写覆盖。</p>
+            <p class="tl">协议消息类型会被识别并分发到专用处理器，不会作为原始文本混入模型上下文。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">传输层稳定性直接影响推理稳定性</strong>
+          <p>消息竞态或错误路由会导致 worker 协作链断裂，后续决策质量会明显下降。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">权限请求通过 leader 做中继与裁决</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/screens/REPL.tsx`（第 2216-2248、4672-4719 行）+ `source/claude-code-source/src/utils/swarm/permissionSync.ts`（第 8-18、805-918 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (isAgentSwarmsEnabled() &amp;&amp; isSwarmWorker()) {</span>
+<span class="code-line">  const requestId = generateSandboxRequestId()</span>
+<span class="code-line">  const sent = await sendSandboxPermissionRequestViaMailbox(hostPattern.host, requestId)</span>
+<span class="code-line">  registerSandboxPermissionCallback({ requestId, host, resolve })</span>
+<span class="code-line">  setAppState(...pendingSandboxRequest...)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">focusedInputDialog === 'worker-sandbox-permission' ...</span>
+<span class="code-line">sendSandboxPermissionResponseViaMailbox(workerName, requestId, host, allow, teamName)</span>
+<span class="code-line">setAppState(...workerSandboxPermissions.queue.slice(1))</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">worker 触发受限网络访问时，会把请求发给 leader，不会本地直接批准。</p>
+            <p class="tl">leader UI 从队列读取请求，用户批准后再通过 mailbox 返回响应。</p>
+            <p class="tl">worker 和 leader 两侧都有显式 pending 状态，阻塞原因对用户可见。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Mailbox 群聊模式</h2>
+      <div class="chat-window animate-in" id="chat-module11-zh">
+        <div class="chat-messages">
+          <div class="chat-message" data-msg="0" data-sender="a" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-1)">工</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-1)">Worker</span><p>发送 `sandbox_permission_request`，包含 requestId 与目标 host。</p></div></div>
+          <div class="chat-message" data-msg="1" data-sender="b" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-2)">领</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-2)">Leader REPL</span><p>请求进入 `workerSandboxPermissions.queue`，弹出审批对话。</p></div></div>
+          <div class="chat-message" data-msg="2" data-sender="c" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-3)">领</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-3)">Leader</span><p>审批结果以 `sandbox_permission_response` 通过 mailbox 返回。</p></div></div>
+          <div class="chat-message" data-msg="3" data-sender="d" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-4)">工</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-4)">Worker</span><p>pending 状态清除，继续执行之前阻塞的工具调用。</p></div></div>
+          <div class="chat-message" data-msg="4" data-sender="e" style="display:none"><div class="chat-avatar" style="background: var(--color-actor-5)">协</div><div class="chat-bubble"><span class="chat-sender" style="color: var(--color-actor-5)">Coordinator</span><p>最终结果以 `&lt;task-notification&gt;` 进入下一轮综合决策。</p></div></div>
+        </div>
+        <div class="chat-typing" id="chat-module11-zh-typing" style="display:none">
+          <div class="chat-avatar" id="chat-module11-zh-typing-avatar">?</div><div class="chat-typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>
+        </div>
+        <div class="chat-controls"><button class="btn chat-next-btn">下一条</button><button class="btn chat-all-btn">播放全部</button><button class="btn chat-reset-btn">重播</button><span class="chat-progress"></span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">启动快照与 headless 轮询保证协作一致性</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/setup.ts`（第 104-109、365-368 行）+ `source/claude-code-source/src/main.tsx`（第 3030-3035 行）+ `source/claude-code-source/src/utils/swarm/reconnection.ts`（第 16-25、57-65 行）+ `source/claude-code-source/src/state/AppStateStore.ts`（第 323-384 行）+ `source/claude-code-source/src/cli/print.ts`（第 2010-2093、2497-2612 行）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">captureTeammateModeSnapshot()</span>
+<span class="code-line">startTeamMemoryWatcher()</span>
+<span class="code-line">teamContext: assistantTeamContext ?? computeInitialTeamContext?.()</span>
+<span class="code-line">teamContext: { teamName, leadAgentId, selfAgentName, teammates: {} }</span>
+<span class="code-line">workerSandboxPermissions.queue / pendingWorkerRequest / pendingSandboxRequest</span>
+<span class="code-line"></span>
+<span class="code-line">if (command.mode === 'task-notification') { ... parse XML ... }</span>
+<span class="code-line">const unread = await readUnreadMessages('team-lead', teamName)</span>
+<span class="code-line">enqueue({ mode: 'prompt', value: formattedTeammateXml })</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">会话启动阶段会固定 teammate 模式，并启动 team memory watcher，减少运行期漂移。</p>
+            <p class="tl">`teamContext` 和 worker 审批队列是全局状态的一部分，跨回合可追踪。</p>
+            <p class="tl">headless 模式同样会解析 task-notification 和未读 mailbox 消息，再回灌到模型循环。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">状态面</code><span class="badge-desc">`AppStateStore` 中的 teamContext、inbox、worker 审批队列</span></div>
+        <div class="badge-item"><code class="badge-code">传输面</code><span class="badge-desc">mailbox JSON + lock + 协议化 message type</span></div>
+        <div class="badge-item"><code class="badge-code">执行面</code><span class="badge-desc">REPL 与 print.ts 都会把团队消息回送到下一轮推理</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module11-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。Coordinator 模式下，worker 结果通过 `&lt;task-notification&gt;` 结构化传入，需要解析后综合。" data-explanation-wrong="worker 完成信号属于结构化通知，应按协议解析后综合。">
+          <h3 class="quiz-question">Coordinator 模式下，worker 完成消息应如何处理？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>当作普通用户闲聊，直接回复</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按 `&lt;task-notification&gt;` 结构化信号解析并综合</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>仅作为插件事件记录</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。mailbox 写入通过 lockfile 串行化，并带重试机制。" data-explanation-wrong="并发写保护依赖锁和重读追加流程。">
+          <h3 class="quiz-question">mailbox 写入避免竞态的关键机制是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>按时间戳排序后覆盖写入</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>强制所有 worker 串行运行</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>lockfile 串行化 + 重试 + 读后追加写回</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。worker 会把请求发给 leader，等待 mailbox 响应后继续执行。" data-explanation-wrong="swarm worker 不会直接自批准受限网络访问。">
+          <h3 class="quiz-question">swarm worker 需要受限网络访问时，标准路径是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>通过 mailbox 发给 leader 审批，再依据响应继续</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>worker 端自动批准并继续</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>静默丢弃调用，不反馈状态</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module11-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module11-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

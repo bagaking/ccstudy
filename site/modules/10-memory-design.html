@@ -1,0 +1,204 @@
+<section class="module" id="module-10">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">10</span>
+      <h1 class="module-title">Memory Design: Durable Recall Without Drift</h1>
+      <p class="module-subtitle">Claude Code memory is a bounded, typed file system with strict path controls, selective retrieval, and eventual team sync. The design trades raw volume for reliability.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">System shape: index, typed files, retrieval, sync</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🗂️</div>
+          <h4 class="pattern-title">Entrypoint index</h4>
+          <p class="pattern-desc"><code>MEMORY.md</code> is a compact index of pointers. It is always loaded, capped, and intentionally concise.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🏷️</div>
+          <h4 class="pattern-title">Typed memory files</h4>
+          <p class="pattern-desc">Each memory lives in its own markdown file with frontmatter and one of four types: <code>user</code>, <code>feedback</code>, <code>project</code>, <code>reference</code>.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🔁</div>
+          <h4 class="pattern-title">Scoped sync</h4>
+          <p class="pattern-desc">Team memory is project-scoped, path-validated, and synced with pull-first + checksum-based delta push.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">📌</div>
+        <div class="callout-content">
+          <strong class="callout-title">Core memory design rule</strong>
+          <p>Store only context that cannot be derived from current code or git state. This keeps memory high-signal and future-useful.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Entrypoint loading is bounded by both line and byte caps</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/memdir.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const MAX_ENTRYPOINT_LINES = 200</span>
+<span class="code-line">export const MAX_ENTRYPOINT_BYTES = 25_000</span>
+<span class="code-line"></span>
+<span class="code-line">export function truncateEntrypointContent(raw: string): EntrypointTruncation {</span>
+<span class="code-line">  const contentLines = raw.trim().split('\n')</span>
+<span class="code-line">  const wasLineTruncated = contentLines.length &gt; MAX_ENTRYPOINT_LINES</span>
+<span class="code-line">  const wasByteTruncated = raw.trim().length &gt; MAX_ENTRYPOINT_BYTES</span>
+<span class="code-line">  ...</span>
+<span class="code-line">  return {</span>
+<span class="code-line">    content: truncated + '\n\n&gt; WARNING: MEMORY.md is ...',</span>
+<span class="code-line">    wasLineTruncated,</span>
+<span class="code-line">    wasByteTruncated,</span>
+<span class="code-line">  }</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">`MEMORY.md` is treated as a bounded index, not an unbounded notebook.</p>
+            <p class="tl">The runtime applies two independent caps: max lines and max bytes, then appends a warning when either cap fires.</p>
+            <p class="tl">This prevents long-line failure modes and protects context budget predictability.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Path resolution has explicit precedence and safety gates</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/paths.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function isAutoMemoryEnabled(): boolean {</span>
+<span class="code-line">  if (isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY)) return false</span>
+<span class="code-line">  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) return false</span>
+<span class="code-line">  ...</span>
+<span class="code-line">  return true</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export const getAutoMemPath = memoize(() =&gt; {</span>
+<span class="code-line">  const override = getAutoMemPathOverride() ?? getAutoMemPathSetting()</span>
+<span class="code-line">  if (override) return override</span>
+<span class="code-line">  return join(getMemoryBaseDir(), 'projects', sanitizePath(getAutoMemBase()), 'memory') + sep</span>
+<span class="code-line">})</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Memory can be disabled by environment, bare mode, remote constraints, or settings.</p>
+            <p class="tl">When enabled, path selection follows a strict override chain: env override, trusted settings override, then canonical project-derived default.</p>
+            <p class="tl">The code normalizes and validates paths to block dangerous roots and traversal-like shapes.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">Predictability</code><span class="badge-desc">One deterministic path policy for every session.</span></div>
+        <div class="badge-item"><code class="badge-code">Security</code><span class="badge-desc">Reject unsafe overrides before they become write roots.</span></div>
+        <div class="badge-item"><code class="badge-code">Portability</code><span class="badge-desc">Path normalization handles cross-platform edge cases.</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Team memory writes use two-pass containment checks</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/teamMemPaths.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function validateTeamMemKey(relativeKey: string): Promise&lt;string&gt; {</span>
+<span class="code-line">  sanitizePathKey(relativeKey)</span>
+<span class="code-line">  const fullPath = join(getTeamMemPath(), relativeKey)</span>
+<span class="code-line">  const resolvedPath = resolve(fullPath)</span>
+<span class="code-line">  if (!resolvedPath.startsWith(getTeamMemPath())) throw new PathTraversalError(...)</span>
+<span class="code-line">  const realPath = await realpathDeepestExisting(resolvedPath)</span>
+<span class="code-line">  if (!(await isRealPathWithinTeamDir(realPath))) throw new PathTraversalError(...)</span>
+<span class="code-line">  return resolvedPath</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">First pass blocks obvious escapes: null bytes, encoded traversal, backslashes, absolute paths, and `..` escapes after resolve.</p>
+            <p class="tl">Second pass resolves symlinks on the deepest existing ancestor, then verifies the canonical path still sits inside team memory.</p>
+            <p class="tl">This closes symlink escape and dangling-link write vectors.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">🛡️</div>
+        <div class="callout-content">
+          <strong class="callout-title">String checks alone are insufficient</strong>
+          <p>`path.resolve()` removes `..` segments, but symlink targets can still jump outside the directory. Realpath containment closes that gap.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Retrieval and sync are selective, debounced, and conflict-aware</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/memdir/findRelevantMemories.ts` + `source/claude-code-source/src/services/teamMemorySync/index.ts` + `source/claude-code-source/src/services/teamMemorySync/watcher.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const selectedFilenames = await selectRelevantMemories(query, memories, signal, recentTools)</span>
+<span class="code-line">...</span>
+<span class="code-line">const DEBOUNCE_MS = 2000</span>
+<span class="code-line">function schedulePush(): void {</span>
+<span class="code-line">  if (pushSuppressedReason !== null) return</span>
+<span class="code-line">  hasPendingChanges = true</span>
+<span class="code-line">  debounceTimer = setTimeout(() =&gt; { currentPushPromise = executePush() }, DEBOUNCE_MS)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// delta push: upload only entries whose hash differs from serverChecksums</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Recall selects up to five clearly useful memories by querying over file headers, then filters to valid filenames.</p>
+            <p class="tl">Team sync pulls first, watches local writes, and batches pushes after a 2-second quiet window.</p>
+            <p class="tl">Push traffic is checksum-delta based; conflicts and permanent failures are handled with explicit retry and suppression logic.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Initial pull</strong><p>Fetch remote entries and hydrate local team directory.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Watch + debounce</strong><p>Observe filesystem changes and coalesce bursts before push.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Delta upload</strong><p>Upload only changed keys; preserve other keys server-side.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">4</div><div class="step-body"><strong>Conflict handling</strong><p>On ETag mismatch, refresh hashes and retry with updated state.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module10">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. The design caps both line count and byte size, then appends a warning to keep MEMORY.md usable as an index." data-explanation-wrong="The runtime uses both caps together. This protects against long-line indexes and keeps prompt loading predictable.">
+          <h3 class="quiz-question">Why does `truncateEntrypointContent` enforce both line and byte caps?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only to improve markdown rendering style</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To bound index size across normal and long-line failure modes</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To force every memory file under 25KB</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. Team path validation combines resolved-path prefix checks with realpath containment checks to stop symlink escapes." data-explanation-wrong="Resolve alone is not enough. Symlink targets can still escape unless canonical realpath containment is checked.">
+          <h3 class="quiz-question">Which control closes the symlink escape gap in team memory writes?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Realpath-based containment after initial resolve checks</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Sorting filenames alphabetically before upload</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Ignoring files with empty content</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. The watcher uses debounced scheduling, while push logic computes a hash delta against server checksums." data-explanation-wrong="The design is not full-snapshot per keystroke. It coalesces edits and uploads only changed entries when possible.">
+          <h3 class="quiz-question">What best describes team memory push behavior?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Push every file immediately on every write event</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Push only on session shutdown</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Debounce local changes, then push checksum-based delta entries</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module10')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module10')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

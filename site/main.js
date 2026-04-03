@@ -39,6 +39,15 @@
     viewerIdle: '点击页面中的文件引用即可加载源码。',
     viewerLoading: '正在加载源码...',
     viewerLoadFailed: '源码加载失败：',
+    viewerDirectoryLabel: '目录',
+    viewerDirectoryEmpty: '这个目录下没有可显示的文件。',
+    viewerDirectorySearchEmpty: '没有匹配的文件或目录。',
+    viewerDirectoryIndexFailed: '目录索引加载失败。',
+    viewerDirectoryUp: '上一级',
+    viewerFocusNone: '聚焦：整份文件',
+    viewerFocusLabel: (ranges) => `聚焦行：${ranges}`,
+    viewerSearchPlaceholder: '搜索文件或目录',
+    viewerBytesLabel: (source, bytes) => `${source} · ${bytes.toLocaleString()} bytes`,
     viewerButton: '查看源码',
     viewerGithub: '在 GitHub 打开',
   } : {
@@ -57,6 +66,15 @@
     viewerIdle: 'Select a file reference to load source.',
     viewerLoading: 'Loading source...',
     viewerLoadFailed: 'Failed to load source: ',
+    viewerDirectoryLabel: 'Directory',
+    viewerDirectoryEmpty: 'No files in this directory.',
+    viewerDirectorySearchEmpty: 'No matching files or folders.',
+    viewerDirectoryIndexFailed: 'Directory index unavailable.',
+    viewerDirectoryUp: 'Up one level',
+    viewerFocusNone: 'Focus: full file',
+    viewerFocusLabel: (ranges) => `Focus lines: ${ranges}`,
+    viewerSearchPlaceholder: 'Search files or folders',
+    viewerBytesLabel: (source, bytes) => `${source} · ${bytes.toLocaleString()} bytes`,
     viewerButton: 'View Source',
     viewerGithub: 'Open on GitHub',
   };
@@ -73,6 +91,10 @@
   const viewerClose = $('#code-viewer-close');
   const viewerPathEl = $('#code-viewer-path');
   const viewerStatusEl = $('#code-viewer-status');
+  const viewerBreadcrumbsEl = $('#code-viewer-breadcrumbs');
+  const viewerDirectoryEl = $('#code-viewer-directory');
+  const viewerSearchEl = $('#code-viewer-search');
+  const viewerFocusEl = $('#code-viewer-focus');
   const viewerCodeEl = $('#code-viewer-code');
   const viewerGithubLink = $('#code-viewer-github');
   const heroDossier = $('#hero-dossier');
@@ -82,7 +104,15 @@
   const REPO_OWNER = 'bagaking';
   const REPO_NAME = 'ccstudy';
   const SOURCE_BRANCHES = ['main', 'master'];
+  const SOURCE_ROOT = 'source/claude-code-source/';
   const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const viewerState = {
+    currentPath: null,
+    browseDir: SOURCE_ROOT,
+    lineRanges: [],
+    search: '',
+  };
+  let sourceIndexPromise = null;
 
   function escapeHtml(text) {
     return text
@@ -109,6 +139,29 @@
     return null;
   }
 
+  function normalizeDirectoryPath(pathname) {
+    if (!pathname) return '/';
+    if (pathname.endsWith('/')) return pathname;
+    const last = pathname.split('/').pop() || '';
+    if (last.includes('.')) {
+      return pathname.replace(/[^/]*$/, '');
+    }
+    return `${pathname}/`;
+  }
+
+  function getSiteRootPath() {
+    let dir = normalizeDirectoryPath(window.location.pathname || '/');
+    if (IS_ZH) {
+      dir = dir.replace(/zh\/$/u, '');
+    }
+    return dir || '/';
+  }
+
+  function toSiteUrl(relativePath) {
+    const base = new URL(getSiteRootPath(), window.location.href);
+    return new URL(relativePath, base).href;
+  }
+
   function toRawUrl(path, branch) {
     return `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${branch}/${path}`;
   }
@@ -117,39 +170,151 @@
     return `https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/${branch}/${path}`;
   }
 
+  function withLineFragment(url, lineRanges) {
+    const first = Array.isArray(lineRanges) ? lineRanges[0] : lineRanges;
+    if (!first || !first.start) return url;
+    if (first.end && first.end > first.start) {
+      return `${url}#L${first.start}-L${first.end}`;
+    }
+    return `${url}#L${first.start}`;
+  }
+
   function toSearchUrl(path) {
     return `https://github.com/${REPO_OWNER}/${REPO_NAME}/search?q=${encodeURIComponent(path)}&type=code`;
   }
 
-  function parseLineRange(rawText) {
-    if (!rawText) return null;
-    const text = String(rawText);
-    const patterns = [
-      /lines?\s*~?\s*(\d+)\s*[-–]\s*(\d+)/i,
-      /第\s*~?\s*(\d+)\s*[-–]\s*(\d+)\s*行/u,
-      /第\s*(\d+)\s*行/u,
-      /line\s*(\d+)/i,
-    ];
-    for (const p of patterns) {
-      const m = text.match(p);
-      if (!m) continue;
-      const start = Number(m[1]);
-      const end = m[2] ? Number(m[2]) : start;
-      if (Number.isFinite(start) && Number.isFinite(end)) {
+  function normalizeLineRanges(ranges) {
+    const seen = new Set();
+    return (ranges || [])
+      .map(range => {
+        if (!range) return null;
+        const start = Number(range.start);
+        const end = Number(range.end || range.start);
+        if (!Number.isFinite(start) || start <= 0 || !Number.isFinite(end) || end < start) return null;
         return { start, end };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start || a.end - b.end)
+      .filter(range => {
+        const key = `${range.start}:${range.end}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  function parseLineRangeList(fragment) {
+    return normalizeLineRanges(
+      String(fragment || '')
+        .split(/[,，、]/u)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => {
+          const clean = part.replace(/^~+/u, '');
+          const match = clean.match(/^(\d+)(?:\s*[-–]\s*(\d+))?$/u);
+          if (!match) return null;
+          return {
+            start: Number(match[1]),
+            end: match[2] ? Number(match[2]) : Number(match[1]),
+          };
+        })
+    );
+  }
+
+  function parseLineRanges(rawText) {
+    if (!rawText) return [];
+    const text = String(rawText);
+    const candidates = [];
+    const patterns = [
+      /lines?\s*(?:[:：]|\b)?\s*((?:~?\d+(?:\s*[-–]\s*\d+)?(?:\s*[,，、]\s*~?\d+(?:\s*[-–]\s*\d+)?)*)+)/ig,
+      /(?:第|约)\s*((?:~?\d+(?:\s*[-–]\s*\d+)?(?:\s*[,，、]\s*~?\d+(?:\s*[-–]\s*\d+)?)*)+)\s*行/gu,
+      /\(\s*~?\s*((?:\d+(?:\s*[-–]\s*\d+)?(?:\s*[,，、]\s*\d+(?:\s*[-–]\s*\d+)?)*)+)\s*\)/g,
+    ];
+
+    patterns.forEach(pattern => {
+      for (const match of text.matchAll(pattern)) {
+        if (match[1]) candidates.push(match[1]);
       }
+    });
+
+    const ranges = normalizeLineRanges(candidates.flatMap(parseLineRangeList));
+    if (ranges.length) return ranges;
+
+    const singlePatterns = [
+      /line\s*(\d+)/i,
+      /第\s*(\d+)\s*行/u,
+    ];
+    for (const pattern of singlePatterns) {
+      const match = text.match(pattern);
+      if (!match) continue;
+      return normalizeLineRanges([{ start: Number(match[1]), end: Number(match[1]) }]);
     }
-    return null;
+    return [];
+  }
+
+  function serializeLineRanges(lineRanges) {
+    return normalizeLineRanges(lineRanges)
+      .map(range => range.start === range.end ? `${range.start}` : `${range.start}-${range.end}`)
+      .join(',');
+  }
+
+  function parseDataLineRanges(rawRanges, rawStart, rawEnd) {
+    if (rawRanges) {
+      const ranges = parseLineRangeList(String(rawRanges));
+      if (ranges.length) return ranges;
+    }
+    const start = Number(rawStart || '');
+    const end = Number(rawEnd || '');
+    if (Number.isFinite(start) && start > 0) {
+      return [{ start, end: Number.isFinite(end) && end >= start ? end : start }];
+    }
+    return [];
+  }
+
+  function formatLineRanges(lineRanges) {
+    const ranges = normalizeLineRanges(lineRanges);
+    if (!ranges.length) return '';
+    return ranges.map(range => range.start === range.end ? `${range.start}` : `${range.start}-${range.end}`)
+      .join(IS_ZH ? '、' : ', ');
   }
 
   function toLocalSourceUrl(path) {
-    return IS_ZH ? `../${path}` : path;
+    return toSiteUrl(path);
+  }
+
+  function toSourceIndexUrl() {
+    return toSiteUrl('source-index.json');
+  }
+
+  function isProbablyHtmlDocument(text) {
+    const head = String(text || '').slice(0, 512).toLowerCase();
+    return head.includes('<!doctype html') || head.includes('<html');
   }
 
   async function fetchText(url) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(String(res.status));
-    return res.text();
+    const text = await res.text();
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (contentType.includes('text/html') || isProbablyHtmlDocument(text)) {
+      throw new Error('wrong-resource');
+    }
+    return text;
+  }
+
+  async function fetchJson(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  }
+
+  async function ensureSourceIndex() {
+    if (!sourceIndexPromise) {
+      sourceIndexPromise = fetchJson(toSourceIndexUrl())
+        .then(data => Array.isArray(data) ? data.filter(path => typeof path === 'string' && path.startsWith(SOURCE_ROOT)) : [])
+        .catch(() => []);
+    }
+    return sourceIndexPromise;
   }
 
   async function fetchSource(path) {
@@ -167,16 +332,21 @@
     throw new Error('404');
   }
 
-  function renderCodeLines(text, lineRange) {
+  function renderCodeLines(text, lineRanges) {
     const lines = text.replace(/\r\n/g, '\n').split('\n');
     viewerCodeEl.innerHTML = lines.map((line, idx) => {
       const lineNo = idx + 1;
-      const active = lineRange && lineNo >= lineRange.start && lineNo <= lineRange.end;
-      return `<span class="code-viewer-line${active ? ' active' : ''}" data-line="${lineNo}">${highlightCode(line)}</span>`;
+      const active = (lineRanges || []).some(range => lineNo >= range.start && lineNo <= range.end);
+      const activeFirst = (lineRanges || []).some(range => lineNo === range.start);
+      const classes = ['code-viewer-line'];
+      if (active) classes.push('active');
+      if (activeFirst) classes.push('active-first');
+      return `<span class="${classes.join(' ')}" data-line="${lineNo}">${highlightCode(line)}</span>`;
     }).join('');
 
-    if (lineRange) {
-      const target = viewerCodeEl.querySelector(`.code-viewer-line[data-line="${lineRange.start}"]`);
+    const firstRange = normalizeLineRanges(lineRanges)[0];
+    if (firstRange) {
+      const target = viewerCodeEl.querySelector(`.code-viewer-line[data-line="${firstRange.start}"]`);
       if (target) target.scrollIntoView({ block: 'center' });
     }
   }
@@ -217,23 +387,157 @@
     body.classList.remove('viewer-open');
   }
 
-  async function openViewer(pathLike, lineRange) {
+  function pathDirname(path) {
+    const idx = path.lastIndexOf('/');
+    return idx >= 0 ? path.slice(0, idx + 1) : SOURCE_ROOT;
+  }
+
+  function pathBasename(path) {
+    const idx = path.lastIndexOf('/');
+    return idx >= 0 ? path.slice(idx + 1) : path;
+  }
+
+  function parentDirectory(dir) {
+    if (!dir || dir === SOURCE_ROOT) return null;
+    const trimmed = dir.endsWith('/') ? dir.slice(0, -1) : dir;
+    const idx = trimmed.lastIndexOf('/');
+    if (idx < 0) return null;
+    const parent = trimmed.slice(0, idx + 1);
+    return parent || SOURCE_ROOT;
+  }
+
+  function listDirectoryEntries(paths, dir) {
+    const directories = new Set();
+    const files = [];
+
+    paths.forEach(path => {
+      if (!path.startsWith(dir) || path === dir) return;
+      const rest = path.slice(dir.length);
+      if (!rest) return;
+      const slashIdx = rest.indexOf('/');
+      if (slashIdx >= 0) {
+        directories.add(`${dir}${rest.slice(0, slashIdx + 1)}`);
+      } else {
+        files.push(path);
+      }
+    });
+
+    return {
+      directories: Array.from(directories).sort((a, b) => a.localeCompare(b)),
+      files: files.sort((a, b) => a.localeCompare(b)),
+    };
+  }
+
+  function renderDirectoryMessage(message) {
+    if (!viewerDirectoryEl) return;
+    viewerDirectoryEl.innerHTML = `<div class="code-viewer-entry-note">${escapeHtml(message)}</div>`;
+  }
+
+  function renderDirectoryEntries(paths) {
+    if (!viewerDirectoryEl || !viewerBreadcrumbsEl) return;
+    const currentDir = viewerState.browseDir || SOURCE_ROOT;
+    const search = (viewerState.search || '').trim().toLowerCase();
+
+    const segments = currentDir.replace(/\/$/u, '').split('/').filter(Boolean);
+    let walk = '';
+    viewerBreadcrumbsEl.innerHTML = segments.map((segment, index) => {
+      walk += `${segment}/`;
+      const active = index === segments.length - 1;
+      return `<button class="code-viewer-crumb${active ? ' active' : ''}" type="button" data-dir="${walk}">${escapeHtml(segment)}</button>`;
+    }).join('');
+
+    if (search) {
+      const matches = paths
+        .filter(path => path.toLowerCase().includes(search))
+        .sort((a, b) => a.localeCompare(b))
+        .slice(0, 200);
+      if (!matches.length) {
+        renderDirectoryMessage(I18N.viewerDirectorySearchEmpty);
+        return;
+      }
+      viewerDirectoryEl.innerHTML = matches.map(path => {
+        const active = path === viewerState.currentPath;
+        return `<button class="code-viewer-entry file${active ? ' active' : ''}" type="button" data-file="${path}">
+          <span class="code-viewer-entry-kind">FILE</span>
+          <span class="code-viewer-entry-label">${escapeHtml(path.slice(SOURCE_ROOT.length))}</span>
+        </button>`;
+      }).join('');
+      return;
+    }
+
+    const { directories, files } = listDirectoryEntries(paths, currentDir);
+    const parent = parentDirectory(currentDir);
+    const entries = [];
+
+    if (parent) {
+      entries.push(`<button class="code-viewer-entry dir" type="button" data-dir="${parent}">
+        <span class="code-viewer-entry-kind">DIR</span>
+        <span class="code-viewer-entry-label">${escapeHtml(I18N.viewerDirectoryUp)}</span>
+      </button>`);
+    }
+
+    directories.forEach(dir => {
+      entries.push(`<button class="code-viewer-entry dir" type="button" data-dir="${dir}">
+        <span class="code-viewer-entry-kind">DIR</span>
+        <span class="code-viewer-entry-label">${escapeHtml(pathBasename(dir.slice(0, -1)))}/</span>
+      </button>`);
+    });
+
+    files.forEach(path => {
+      const active = path === viewerState.currentPath;
+      entries.push(`<button class="code-viewer-entry file${active ? ' active' : ''}" type="button" data-file="${path}">
+        <span class="code-viewer-entry-kind">FILE</span>
+        <span class="code-viewer-entry-label">${escapeHtml(pathBasename(path))}</span>
+      </button>`);
+    });
+
+    if (!entries.length) {
+      renderDirectoryMessage(I18N.viewerDirectoryEmpty);
+      return;
+    }
+    viewerDirectoryEl.innerHTML = entries.join('');
+  }
+
+  async function refreshDirectoryView() {
+    if (!viewerDirectoryEl) return;
+    renderDirectoryMessage(I18N.viewerLoading);
+    const paths = await ensureSourceIndex();
+    if (!paths.length) {
+      renderDirectoryMessage(I18N.viewerDirectoryIndexFailed);
+      return;
+    }
+    renderDirectoryEntries(paths);
+  }
+
+  function updateViewerFocus(lineRanges) {
+    if (!viewerFocusEl) return;
+    const formatted = formatLineRanges(lineRanges);
+    viewerFocusEl.textContent = formatted ? I18N.viewerFocusLabel(formatted) : I18N.viewerFocusNone;
+  }
+
+  async function openViewer(pathLike, lineRanges) {
     const path = normalizeSourcePath(pathLike);
     if (!path || !viewerShell || !viewerPathEl || !viewerStatusEl || !viewerCodeEl || !viewerGithubLink) return;
+    const normalizedRanges = normalizeLineRanges(lineRanges);
+    viewerState.currentPath = path;
+    viewerState.browseDir = pathDirname(path);
+    viewerState.lineRanges = normalizedRanges;
     viewerShell.classList.add('open');
     viewerShell.setAttribute('aria-hidden', 'false');
     body.classList.add('viewer-open');
     viewerPathEl.textContent = path;
     viewerStatusEl.textContent = I18N.viewerLoading;
+    updateViewerFocus(normalizedRanges);
     viewerCodeEl.innerHTML = '';
     viewerGithubLink.textContent = I18N.viewerGithub;
-    viewerGithubLink.href = toBlobUrl(path, 'main');
+    viewerGithubLink.href = withLineFragment(toBlobUrl(path, 'main'), normalizedRanges);
+    refreshDirectoryView();
 
     try {
       const { text, source } = await fetchSource(path);
-      renderCodeLines(text, lineRange);
-      viewerStatusEl.textContent = `${source} · ${text.length.toLocaleString()} bytes`;
-      viewerGithubLink.href = toBlobUrl(path, source === 'local' ? 'main' : source);
+      renderCodeLines(text, normalizedRanges);
+      viewerStatusEl.textContent = I18N.viewerBytesLabel(source, text.length);
+      viewerGithubLink.href = withLineFragment(toBlobUrl(path, source === 'local' ? 'main' : source), normalizedRanges);
     } catch (err) {
       viewerStatusEl.textContent = `${I18N.viewerLoadFailed}${err instanceof Error ? err.message : 'unknown'}`;
     }
@@ -248,13 +552,13 @@
       if (node.closest('.translation-code, .translation-english, .chat-window, .code-viewer-shell')) return;
 
       const html = node.innerHTML;
-      const lineRange = parseLineRange(node.textContent || '');
+      const lineRanges = parseLineRanges(node.textContent || '');
       if (!html.includes('`')) return;
 
       const nextHtml = html.replace(matcher, (_m, rawPath) => {
         const path = normalizeSourcePath(rawPath);
         if (!path) return _m;
-        const attrs = lineRange ? ` data-line-start="${lineRange.start}" data-line-end="${lineRange.end}"` : '';
+        const attrs = lineRanges.length ? ` data-line-ranges="${serializeLineRanges(lineRanges)}"` : '';
         return `<span class="snippet-open-btn" role="button" tabindex="0" data-open-file="${path}"${attrs} title="${path}">${path}</span>`;
       });
 
@@ -275,27 +579,54 @@
       if (el.dataset.viewerClickBound === '1') return;
       const p = el.dataset.openFile;
       if (!p) return;
-      const lineStart = Number(el.dataset.lineStart || '');
-      const lineEnd = Number(el.dataset.lineEnd || '');
-      const lineRange = Number.isFinite(lineStart) && lineStart > 0
-        ? { start: lineStart, end: Number.isFinite(lineEnd) && lineEnd >= lineStart ? lineEnd : lineStart }
-        : null;
+      const lineRanges = parseDataLineRanges(el.dataset.lineRanges, el.dataset.lineStart, el.dataset.lineEnd);
       el.addEventListener('click', e => {
         e.preventDefault();
         e.stopPropagation();
-        openViewer(p, lineRange);
+        openViewer(p, lineRanges);
       });
       el.addEventListener('keydown', e => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           e.stopPropagation();
-          openViewer(p, lineRange);
+          openViewer(p, lineRanges);
         }
       });
       el.dataset.viewerClickBound = '1';
     });
     if (viewerBackdrop) viewerBackdrop.addEventListener('click', closeViewer);
     if (viewerClose) viewerClose.addEventListener('click', closeViewer);
+    if (viewerSearchEl) {
+      viewerSearchEl.placeholder = I18N.viewerSearchPlaceholder;
+      viewerSearchEl.addEventListener('input', () => {
+        viewerState.search = viewerSearchEl.value || '';
+        refreshDirectoryView();
+      });
+    }
+    if (viewerBreadcrumbsEl) {
+      viewerBreadcrumbsEl.addEventListener('click', e => {
+        const target = e.target.closest('[data-dir]');
+        if (!target) return;
+        viewerState.browseDir = target.dataset.dir || SOURCE_ROOT;
+        refreshDirectoryView();
+      });
+    }
+    if (viewerDirectoryEl) {
+      viewerDirectoryEl.addEventListener('click', e => {
+        const target = e.target.closest('button');
+        if (!target) return;
+        const dir = target.dataset.dir;
+        const file = target.dataset.file;
+        if (dir) {
+          viewerState.browseDir = dir;
+          refreshDirectoryView();
+          return;
+        }
+        if (file) {
+          openViewer(file, []);
+        }
+      });
+    }
   }
 
   function setMode(mode) {
@@ -521,6 +852,7 @@
   initMode();
   initRail();
   buildChapterList();
+  updateProgress();
   initHeroMetrics();
   initHeroActions();
   initHeroParallax();
@@ -915,19 +1247,32 @@
 
   /* ── ARCHITECTURE DIAGRAM ──────────────────────────────────── */
   $$('.arch-component').forEach(comp => {
-    comp.addEventListener('click', function () {
-      const diagram = this.closest('.arch-diagram');
+    if (!comp.hasAttribute('tabindex')) comp.setAttribute('tabindex', '0');
+    if (!comp.hasAttribute('role')) comp.setAttribute('role', 'button');
+
+    const triggerOpen = () => {
+      const diagram = comp.closest('.arch-diagram');
       $$('.arch-component', diagram).forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
+      comp.classList.add('active');
       const descEl = $('.arch-description', diagram);
-      if (descEl) descEl.textContent = this.dataset.desc || '';
-      if (this.dataset.openFile) {
-        const start = Number(this.dataset.lineStart || '');
-        const end = Number(this.dataset.lineEnd || '');
+      if (descEl) descEl.textContent = comp.dataset.desc || '';
+      if (comp.dataset.openFile) {
+        const start = Number(comp.dataset.lineStart || '');
+        const end = Number(comp.dataset.lineEnd || '');
         const range = Number.isFinite(start) && start > 0
           ? { start, end: Number.isFinite(end) && end >= start ? end : start }
           : null;
-        openViewer(this.dataset.openFile, range);
+        openViewer(comp.dataset.openFile, range);
+      }
+    };
+
+    comp.addEventListener('click', function () {
+      triggerOpen();
+    });
+    comp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        triggerOpen();
       }
     });
   });

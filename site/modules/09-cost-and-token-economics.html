@@ -1,0 +1,258 @@
+<section class="module" id="module-9">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">09</span>
+      <h1 class="module-title">Cost and Token Economics</h1>
+      <p class="module-subtitle">Claude Code tracks money, throughput, and context pressure as separate ledgers. Understanding where those ledgers are computed is the difference between guessing and operating.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">One session, multiple economic ledgers</h2>
+      <p class="animate-in">In this codebase, a single turn can update several accounting systems at once: dollars, token classes, runtime duration, and code-change volume. Cost work is therefore a systems topic, not a single number on a dashboard.</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">💵</div>
+          <h4 class="pattern-title">Billing Ledger</h4>
+          <p class="pattern-desc">`totalCostUSD` and per-model USD are accumulated and formatted for terminal visibility.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧮</div>
+          <h4 class="pattern-title">Token Ledger</h4>
+          <p class="pattern-desc">Input, output, cache read, cache creation, and web search requests are all tracked separately.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">📏</div>
+          <h4 class="pattern-title">Operational Ledger</h4>
+          <p class="pattern-desc">API duration, wall duration, lines added/removed, and tool-side signals are persisted per session.</p>
+        </div>
+      </div>
+      <div class="callout callout-accent animate-in">
+        <div class="callout-icon">⚙️</div>
+        <div class="callout-content">
+          <strong class="callout-title">The same response can move all three ledgers</strong>
+          <p>When one assistant response includes token usage and tool actions, cost, budget pressure, and code-change analytics all move together.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Session cost accumulation is token-class aware</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cost-tracker.ts` (lines 266-322)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">modelUsage.inputTokens += usage.input_tokens</span>
+<span class="code-line">modelUsage.outputTokens += usage.output_tokens</span>
+<span class="code-line">modelUsage.cacheReadInputTokens += usage.cache_read_input_tokens ?? 0</span>
+<span class="code-line">modelUsage.cacheCreationInputTokens += usage.cache_creation_input_tokens ?? 0</span>
+<span class="code-line">modelUsage.webSearchRequests += usage.server_tool_use?.web_search_requests ?? 0</span>
+<span class="code-line">modelUsage.costUSD += cost</span>
+<span class="code-line"></span>
+<span class="code-line">getCostCounter()?.add(cost, attrs)</span>
+<span class="code-line">getTokenCounter()?.add(usage.input_tokens, { ...attrs, type: 'input' })</span>
+<span class="code-line">getTokenCounter()?.add(usage.output_tokens, { ...attrs, type: 'output' })</span>
+<span class="code-line"></span>
+<span class="code-line">for (const advisorUsage of getAdvisorUsage(usage)) {</span>
+<span class="code-line">  const advisorCost = calculateUSDCost(advisorUsage.model, advisorUsage)</span>
+<span class="code-line">  totalCost += addToTotalSessionCost(advisorCost, advisorUsage, advisorUsage.model)</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Cost is computed with category detail, not a flat token total.</p>
+            <p class="tl">The tracker records separate counters for input, output, cache reads, cache writes, and web search calls.</p>
+            <p class="tl">Advisor tool usage is recursively folded in, so nested model calls also contribute to final session cost.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">Per-model</code><span class="badge-desc">Short-name aggregation appears in the formatted summary output.</span></div>
+        <div class="badge-item"><code class="badge-code">Fast mode</code><span class="badge-desc">Metrics include `speed: 'fast'` when the fast-path is active.</span></div>
+        <div class="badge-item"><code class="badge-code">Unknown model guard</code><span class="badge-desc">`formatTotalCost()` can mark output as potentially inaccurate for unknown model costs.</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Cost state is persisted and restored by session identity</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cost-tracker.ts` (lines 87-175), `source/claude-code-source/src/costHook.ts` (lines 6-21)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (projectConfig.lastSessionId !== sessionId) {</span>
+<span class="code-line">  return undefined</span>
+<span class="code-line">}</span>
+<span class="code-line">...</span>
+<span class="code-line">saveCurrentProjectConfig(current =&gt; ({</span>
+<span class="code-line">  ...current,</span>
+<span class="code-line">  lastCost: getTotalCostUSD(),</span>
+<span class="code-line">  lastTotalInputTokens: getTotalInputTokens(),</span>
+<span class="code-line">  lastTotalOutputTokens: getTotalOutputTokens(),</span>
+<span class="code-line">  lastSessionId: getSessionId(),</span>
+<span class="code-line">}))</span>
+<span class="code-line"></span>
+<span class="code-line">if (hasConsoleBillingAccess()) {</span>
+<span class="code-line">  process.stdout.write('\\n' + formatTotalCost() + '\\n')</span>
+<span class="code-line">}</span>
+<span class="code-line">saveCurrentSessionCosts(getFpsMetrics?.())</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Resume restores accounting only when the session id matches, which prevents accidental cross-session carryover.</p>
+            <p class="tl">On process exit, the hook persists current totals every time, and prints a terminal summary only for users with billing-console access.</p>
+            <p class="tl">This design gives continuity for long sessions while preserving access-control boundaries for displayed cost details.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Write snapshot</strong><p>Store cost, token totals, model usage, durations, and line deltas into project config.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Bind to session id</strong><p>Persist `lastSessionId` and reject restore when ids differ.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Recover state</strong><p>Rehydrate model usage with context-window metadata at restore time.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Token budget continuation has explicit parser and stop logic</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/tokenBudget.ts` (lines 3-29, 66-72), `source/claude-code-source/src/query/tokenBudget.ts` (lines 3-93), `source/claude-code-source/src/query.ts` (lines 1308-1354)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const SHORTHAND_START_RE = /^\\s*\\+(\\d+(?:\\.\\d+)?)\\s*(k|m|b)\\b/i</span>
+<span class="code-line">const VERBOSE_RE = /\\b(?:use|spend)\\s+(\\d+(?:\\.\\d+)?)\\s*(k|m|b)\\s*tokens?\\b/i</span>
+<span class="code-line">...</span>
+<span class="code-line">if (!isDiminishing &amp;&amp; turnTokens &lt; budget * 0.9) {</span>
+<span class="code-line">  return { action: 'continue', nudgeMessage: getBudgetContinuationMessage(...) }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if (decision.action === 'continue') {</span>
+<span class="code-line">  state = {</span>
+<span class="code-line">    ...state,</span>
+<span class="code-line">    messages: [...messagesForQuery, ...assistantMessages, createUserMessage({ content: decision.nudgeMessage, isMeta: true })],</span>
+<span class="code-line">    transition: { reason: 'token_budget_continuation' },</span>
+<span class="code-line">  }</span>
+<span class="code-line">  continue</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Budget syntax is intentionally narrow: shorthand like `+500k` and phrases like “use 2m tokens” are parsed into numeric budgets.</p>
+            <p class="tl">Continuation keeps going under 90% budget, but can stop early when marginal token gains are small after repeated continuations.</p>
+            <p class="tl">The continuation instruction is injected as a meta user message, so the agent keeps working without an external user round-trip.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧷</div>
+        <div class="callout-content">
+          <strong class="callout-title">`task_budget` and `+500k` are separate mechanisms</strong>
+          <p>`QueryParams` explicitly marks API `taskBudget` as distinct from local token-budget continuation (`source/claude-code-source/src/query.ts`, lines 193-197).</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Token numbers carry different semantics depending on the function</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/tokens.ts` (lines 46-53, 79-112, 226-260)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export function getTokenCountFromUsage(usage: Usage): number {</span>
+<span class="code-line">  return usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + usage.output_tokens</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function finalContextTokensFromLastResponse(messages: Message[]): number {</span>
+<span class="code-line">  // input + output from final iteration; excludes cache tokens</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export function tokenCountWithEstimation(messages: readonly Message[]): number {</span>
+<span class="code-line">  // canonical threshold metric: usage + rough estimate of trailing messages</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Some functions count billable context with cache tokens, while others intentionally exclude cache to match specific budget formulas.</p>
+            <p class="tl">`tokenCountWithEstimation()` is the canonical threshold metric because it combines the last real usage block with estimated trailing messages.</p>
+            <p class="tl">If you choose the wrong token function, your compact or budget behavior will drift from runtime reality.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item"><code class="badge-code">`getTokenCountFromUsage`</code><span class="badge-desc">Input + output + cache read + cache creation.</span></div>
+        <div class="badge-item"><code class="badge-code">`finalContextTokensFromLastResponse`</code><span class="badge-desc">Final-window budget signal, cache excluded.</span></div>
+        <div class="badge-item"><code class="badge-code">`tokenCountWithEstimation`</code><span class="badge-desc">Threshold-ready context fullness estimate across split assistant records.</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Operational visibility: `/cost` and `/insights` answer different questions</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/commands/cost/cost.ts` (lines 6-24), `source/claude-code-source/src/commands/insights.ts` (lines 525-533, 538-550, 1145-1225)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// /cost</span>
+<span class="code-line">if (isClaudeAISubscriber()) {</span>
+<span class="code-line">  if (currentLimits.isUsingOverage) { ... } else { ... }</span>
+<span class="code-line">  return { type: 'text', value }</span>
+<span class="code-line">}</span>
+<span class="code-line">return { type: 'text', value: formatTotalCost() }</span>
+<span class="code-line"></span>
+<span class="code-line">// /insights extraction + aggregation</span>
+<span class="code-line">if (usage) {</span>
+<span class="code-line">  inputTokens += usage.input_tokens || 0</span>
+<span class="code-line">  outputTokens += usage.output_tokens || 0</span>
+<span class="code-line">}</span>
+<span class="code-line">if (toolName === 'WebSearch') usesWebSearch = true</span>
+<span class="code-line">...</span>
+<span class="code-line">result.total_input_tokens += session.input_tokens</span>
+<span class="code-line">result.total_output_tokens += session.output_tokens</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">`/cost` is a session-local status readout with subscriber-specific messaging.</p>
+            <p class="tl">`/insights` mines historical logs, extracting token/tool/edit signals per session and then aggregating them across sessions.</p>
+            <p class="tl">Together they cover real-time operational cost and long-horizon usage analytics.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module9">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. `addToTotalSessionCost` recursively includes advisor usage, so nested model calls are part of total cost." data-explanation-wrong="`addToTotalSessionCost` does not stop at top-level usage; it recursively adds advisor usage and cost.">
+          <h3 class="quiz-question">Which statement matches how session cost is computed?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only top-level output tokens are converted to USD</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Input/output/cache/web-search are tracked, and advisor usage can recursively add cost</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Cost is inferred from lines changed in edited files</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Yes. Token-budget continuation injects a meta user message and loops again when under threshold." data-explanation-wrong="The continuation path explicitly appends a meta user message and re-enters the query loop.">
+          <h3 class="quiz-question">What does the query loop do when token budget says `continue`?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Adds a meta nudge message (`decision.nudgeMessage`) and continues</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Immediately errors out with `prompt_too_long`</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Resets all token counters to zero</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Exactly. `/cost` is immediate session status; `/insights` is retrospective aggregation from stored logs." data-explanation-wrong="These commands are complementary: `/cost` is local-now, `/insights` is historical aggregate analytics.">
+          <h3 class="quiz-question">Which pairing is accurate?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/insights` prints only current-turn cost</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/cost` computes time-of-day histograms across sessions</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`/cost` shows session status; `/insights` aggregates token/tool patterns from session logs</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module9')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module9')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
