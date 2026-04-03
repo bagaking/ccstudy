@@ -1,0 +1,269 @@
+<section class="module" id="module-16">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">16</span>
+      <h1 class="module-title">Auto Mode 架构</h1>
+      <p class="module-subtitle">Auto Mode 是分类器参与决策的自治模式。进入前要过门禁，宽泛预授权会被剥离，低风险动作走快速通道，失败路径会按交互环境分流。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先看全图：四个控制面共同决定自治边界</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🚪</div>
+          <h4 class="pattern-title">进入门禁</h4>
+          <p class="pattern-desc">CLI 意图、settings、模型支持、fast mode breaker、组织级开关共同决定能否进入 auto。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">✂️</div>
+          <h4 class="pattern-title">危险规则剥离</h4>
+          <p class="pattern-desc">进入 auto 前会移除宽泛 shell、PowerShell、任务相关 allow 规则，保证高风险动作仍会经过分类器。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧮</div>
+          <h4 class="pattern-title">决策流水线</h4>
+          <p class="pattern-desc">先走低成本快速判定，再把高风险动作送入 transcript classifier。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">↩️</div>
+          <h4 class="pattern-title">退出与恢复</h4>
+          <p class="pattern-desc">当 auto 失效时，系统会恢复被剥离规则，退出当前状态，并发出通知或 attachment。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">阅读方式</strong>
+          <p>工程文章给出安全目标；本地源码给出可执行的门禁、剥离、判定和恢复机制。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">进入 auto mode 需要满足门禁条件，用户意图只是其中一项</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/types/permissions.ts`（16-36），`source/claude-code-source/src/utils/permissions/permissionSetup.ts`（690-808, 1078-1128, 1355-1364），`source/claude-code-source/src/main.tsx`（3817-3830）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const EXTERNAL_PERMISSION_MODES = [</span>
+<span class="code-line">  'acceptEdits', 'bypassPermissions', 'default', 'dontAsk', 'plan'</span>
+<span class="code-line">]</span>
+<span class="code-line">export const INTERNAL_PERMISSION_MODES = [ ...EXTERNAL_PERMISSION_MODES, 'auto' ]</span>
+<span class="code-line"></span>
+<span class="code-line">if (permissionModeCli) {</span>
+<span class="code-line">  const parsedMode = permissionModeFromString(permissionModeCli)</span>
+<span class="code-line">  if (parsedMode === 'auto' &amp;&amp; !autoModeCircuitBrokenSync) orderedModes.push('auto')</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const enabledState = parseAutoModeEnabledState(autoModeConfig?.enabled)</span>
+<span class="code-line">const modelSupported = modelSupportsAutoMode(mainModel) &amp;&amp; !disableFastModeBreakerFires</span>
+<span class="code-line">const canEnterAuto = enabledState !== 'disabled' &amp;&amp; !disabledBySettings &amp;&amp; modelSupported</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`auto` 是权限模式集合中的一员，但运行时不会无条件开放。</p>
+            <p class="tl">启动阶段先汇总 CLI 和 settings 的意图，再检查组织级开关、模型支持与 fast mode breaker。</p>
+            <p class="tl">“是否展示在模式选择器中”和“当前是否允许进入 auto”属于两个相关但独立的判断。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">意图来源</code>
+          <span class="badge-desc">`--permission-mode auto`、`--enable-auto-mode`、`permissions.defaultMode = auto`</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">门禁输入</code>
+          <span class="badge-desc">组织配置、settings 禁用、模型支持、fast mode breaker</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">进入 auto 前先剥离危险 allow 规则，保证分类器看到关键动作</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissionSetup.ts`（268-341, 469-557, 582-634）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">function isDangerousClassifierPermission(toolName, ruleContent) {</span>
+<span class="code-line">  return isDangerousBashPermission(toolName, ruleContent)</span>
+<span class="code-line">    || isDangerousPowerShellPermission(toolName, ruleContent)</span>
+<span class="code-line">    || isDangerousTaskPermission(toolName, ruleContent)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const dangerousPermissions = findDangerousClassifierPermissions(rules, [])</span>
+<span class="code-line">logForDebugging(`Ignoring dangerous permission ... (bypasses classifier)`)</span>
+<span class="code-line">return {</span>
+<span class="code-line">  ...removeDangerousPermissions(context, dangerousPermissions),</span>
+<span class="code-line">  strippedDangerousRules: stripped,</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">旧的 always-allow 集合中可能存在宽泛规则，这些规则会让高风险动作绕过分类器。</p>
+            <p class="tl">系统会识别宽泛 shell、解释器和任务规则，并在进入 auto 时从当前权限上下文中移除。</p>
+            <p class="tl">被移除的规则会被暂存，退出 auto 后再恢复。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">关键原因</strong>
+          <p>如果保留 `Bash(*)` 或宽泛 subagent allow 规则，最危险的动作将直接跳过分类器审查。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">自动判定链路先跑低成本快速通道，再进入分类器</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissions.ts`（518-699）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (result.decisionReason?.type === 'safetyCheck' &amp;&amp; !result.decisionReason.classifierApprovable) {</span>
+<span class="code-line">  return result</span>
+<span class="code-line">}</span>
+<span class="code-line">if (tool.name === POWERSHELL_TOOL_NAME &amp;&amp; !feature('POWERSHELL_AUTO_MODE')) return result</span>
+<span class="code-line"></span>
+<span class="code-line">const acceptEditsResult = await tool.checkPermissions(parsedInput, { mode: 'acceptEdits' })</span>
+<span class="code-line">if (acceptEditsResult.behavior === 'allow') return { behavior: 'allow', decisionReason: { type: 'mode', mode: 'auto' } }</span>
+<span class="code-line"></span>
+<span class="code-line">if (classifierDecisionModule!.isAutoModeAllowlistedTool(tool.name)) return allow</span>
+<span class="code-line">classifierResult = await classifyYoloAction(...)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">部分动作仍然必须保留人工审批路径，系统会在分类器之前拦住这些动作。</p>
+            <p class="tl">随后进入两个低成本 allow 快速通道：acceptEdits 模拟检查、safe-tool allowlist。</p>
+            <p class="tl">只有剩余动作才会进入 `classifyYoloAction(...)`。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>硬约束先行</strong><p>不可分类审批的 safety check 和受限工具先保留人工审批。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>快速放行</strong><p>acceptEdits 模拟和 allowlisted tools 优先减少分类器开销。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>分类器判定</strong><p>剩余动作被格式化为 action，进入 transcript classifier。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">失败路径有明确分流：交互模式与 headless 模式行为不同</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissions.ts`（820-926）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (classifierResult.transcriptTooLong) {</span>
+<span class="code-line">  if (appState.toolPermissionContext.shouldAvoidPermissionPrompts) {</span>
+<span class="code-line">    throw new AbortError('Agent aborted: auto mode classifier transcript exceeded context window in headless mode')</span>
+<span class="code-line">  }</span>
+<span class="code-line">  return { ...result, decisionReason: { type: 'other', reason: '...manual approval' } }</span>
+<span class="code-line">}</span>
+<span class="code-line">if (classifierResult.unavailable) {</span>
+<span class="code-line">  if (getFeatureValue_CACHED_WITH_REFRESH('tengu_iron_gate_closed', true, ...)) return deny</span>
+<span class="code-line">  return result</span>
+<span class="code-line">}</span>
+<span class="code-line">const denialLimitResult = handleDenialLimitExceeded(...)</span>
+<span class="code-line">return { behavior: 'deny', decisionReason: { type: 'classifier', classifier: 'auto-mode', reason: classifierResult.reason } }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">classifier transcript 超窗时，交互模式会回到人工审批路径；headless 模式会直接中止，因为没有人工交互入口。</p>
+            <p class="tl">分类器不可用时，系统按 gate 配置选择 fail-closed deny 或 fail-open fallback。</p>
+            <p class="tl">连续拒绝会进入 denial tracking，必要时把流程重新抬回显式审查。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">超窗</code>
+          <span class="badge-desc">交互模式回退到人工审批；headless 模式中止执行</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">分类器不可用</code>
+          <span class="badge-desc">根据 gate 选择 fail-closed 或 fail-open</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">连续拒绝</code>
+          <span class="badge-desc">denial tracking 可推动流程回到人工审查</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Auto mode 会维护状态：退出 attachment、plan mode 协同、运维自检命令</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/bootstrap/state.ts`（132-160, 226-229, 1389-1397），`source/claude-code-source/src/utils/permissions/bypassPermissionsKillswitch.ts`（72-116），`source/claude-code-source/src/utils/permissions/permissionSetup.ts`（1206-1260, 1457-1486），`source/claude-code-source/src/cli/handlers/autoMode.ts`（24-140）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// state.ts</span>
+<span class="code-line">if (toIsAuto &amp;&amp; !fromIsAuto) STATE.needsAutoModeExitAttachment = false</span>
+<span class="code-line">if (fromIsAuto &amp;&amp; !toIsAuto) STATE.needsAutoModeExitAttachment = true</span>
+<span class="code-line"></span>
+<span class="code-line">// permissionSetup.ts</span>
+<span class="code-line">return { ...restoreDangerousPermissions(ctx), prePlanMode: 'auto' }</span>
+<span class="code-line">if (planAutoMode &amp;&amp; currentMode !== 'bypassPermissions') {</span>
+<span class="code-line">  autoModeStateModule?.setAutoModeActive(true)</span>
+<span class="code-line">  return { ...stripDangerousPermissionsForAutoMode(context), prePlanMode: currentMode }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// autoMode.ts / main.tsx</span>
+<span class="code-line">claude auto-mode defaults</span>
+<span class="code-line">claude auto-mode config</span>
+<span class="code-line">claude auto-mode critique</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">进入与退出 auto 会设置显式 session 标志，UI 只在需要时展示一次性提示。</p>
+            <p class="tl">在 plan mode 中，若用户已 opt-in 且 gate 仍打开，auto 语义可继续保持。</p>
+            <p class="tl">运维侧可以通过 `defaults`、`config`、`critique` 查看默认规则、实际配置和自定义规则质量。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🔎</div>
+        <div class="callout-content">
+          <strong class="callout-title">运维建议</strong>
+          <p>在新环境启用 auto 前，先导出默认规则和实际配置，再跑一次规则批注。这样能提前发现本地策略缺口。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module16-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。危险 allow 规则会让高风险动作绕过分类器，所以进入 auto 时需要剥离。" data-explanation-wrong="保留宽泛 allow 规则会让关键高风险动作跳过分类器审查。">
+          <h3 class="quiz-question">为什么系统会在进入 auto 时移除一部分既有 allow 规则？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了减少模型可见工具数量</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了防止高风险动作绕过分类器审查</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>为了强制进入 plan mode</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。headless 模式没有人工审批入口，classifier transcript 超窗会直接触发 abort。" data-explanation-wrong="交互模式可以回退到人工审批；headless 模式没有这个兜底入口。">
+          <h3 class="quiz-question">当 classifier transcript 超出上下文窗口且当前是 headless agent 时，会发生什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>自动切换到更小模型重试</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>统一回退到人工审批弹窗</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>直接中止，因为当前环境没有人工审批路径</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。能否进入 auto 取决于用户意图、gate 状态、settings 和模型支持。" data-explanation-wrong="用户意图只是条件之一，组织级开关、settings 和模型支持也会影响进入结果。">
+          <h3 class="quiz-question">哪项最准确地描述了“是否允许进入 auto mode”的判断条件？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>用户意图 + gate 状态 + settings + 模型支持</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只看 `--permission-mode auto` 是否出现</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只看当前仓库是否已信任</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module16-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module16-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

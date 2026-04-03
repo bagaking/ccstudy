@@ -1,0 +1,238 @@
+<section class="module" id="module-13">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">13</span>
+      <h1 class="module-title">Hooks：运行时策略引擎</h1>
+      <p class="module-subtitle">Hooks 是运行时策略层：接收生命周期事件、并行执行、合并决策，并在工具调用、停止边界与队友任务状态上执行准入与阻断。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">先建立分层模型：事件契约、匹配器、执行器、策略输出</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🧾</div>
+          <h4 class="pattern-title">类型化事件契约</h4>
+          <p class="pattern-desc">`HookInputSchema` 明确每个事件载荷，包括 `Stop`、`SubagentStop`、`TeammateIdle`、`TaskCompleted`、`PermissionRequest`。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🎯</div>
+          <h4 class="pattern-title">匹配与来源合并</h4>
+          <p class="pattern-desc">`getMatchingHooks()` 合并 snapshot、注册回调、plugin/skill、session hooks，再执行 matcher 与 `if` 过滤。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">⚙️</div>
+          <h4 class="pattern-title">并行执行聚合</h4>
+          <p class="pattern-desc">`executeHooks()` 并行运行 command/prompt/agent/http/function/callback，多源结果汇总为单一决策流。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🚦</div>
+          <h4 class="pattern-title">策略作用面</h4>
+          <p class="pattern-desc">可输出 `permissionBehavior`、`updatedInput`、附加上下文，也可通过 exit code 2 触发阻断或停止继续执行。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧠</div>
+        <div class="callout-content">
+          <strong class="callout-title">工程定位</strong>
+          <p>Hooks 位于控制平面，直接影响执行路径和权限决策。日志只是其中一部分副产物。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">生命周期/事件模型来自 SDK schema，边界清晰可审计</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/sdk/coreSchemas.ts` 与 `source/claude-code-source/src/utils/hooks.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const HOOK_EVENTS = [</span>
+<span class="code-line">  'PreToolUse', 'PostToolUse', 'Stop', 'SubagentStop',</span>
+<span class="code-line">  'PermissionRequest', 'TeammateIdle', 'TaskCompleted', ...</span>
+<span class="code-line">]</span>
+<span class="code-line"></span>
+<span class="code-line">const hookInput: StopHookInput | SubagentStopHookInput = subagentId</span>
+<span class="code-line">  ? { hook_event_name: 'SubagentStop', agent_id, agent_transcript_path, ... }</span>
+<span class="code-line">  : { hook_event_name: 'Stop', ... }</span>
+<span class="code-line"></span>
+<span class="code-line">const hookInput: TeammateIdleHookInput = { teammate_name, team_name, ... }</span>
+<span class="code-line">const hookInput: TaskCompletedHookInput = { task_id, task_subject, ... }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">事件集合是固定枚举，新增能力必须显式进入 schema。</p>
+            <p class="tl">`Stop` 与 `SubagentStop` 拆分，主线程与子代理上下文分离，调试链路更稳定。</p>
+            <p class="tl">队友空闲和任务完成属于独立事件，不依赖隐式上下文拼接。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">执行语义：并行扇出 + 统一结果归类（阻断与非阻断）</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/hooks.ts`（`executeHooks`、`execCommandHook`、JSON 解析路径）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const hookPromises = matchingHooks.map(async function* (...) { ... })</span>
+<span class="code-line">for await (const result of all(hookPromises)) { ... }</span>
+<span class="code-line"></span>
+<span class="code-line">if (result.status === 0) outcome = 'success'</span>
+<span class="code-line">if (result.status === 2) outcome = 'blocking'</span>
+<span class="code-line">if (result.status !== 0 &amp;&amp; result.status !== 2)</span>
+<span class="code-line">  outcome = 'non_blocking_error'</span>
+<span class="code-line"></span>
+<span class="code-line">if (isAsyncHookJSONOutput(json)) { ...background... }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">并行执行降低整体等待时间，结果由聚合层统一处理。</p>
+            <p class="tl">exit code `2` 代表策略阻断；其他非零返回码记录为非阻断错误。</p>
+            <p class="tl">异步 hook 可后台继续执行，前台决策面保持可控延迟。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">blocking</code>
+          <span class="badge-desc">exit code 2 或显式 block 决策，产出 `hook_blocking_error`</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">non_blocking_error</code>
+          <span class="badge-desc">执行/校验失败，保留可观测性，不直接触发拒绝</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">preventContinuation</code>
+          <span class="badge-desc">停止当前继续链路并带 stop reason，可独立于 blocking 使用</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">策略门控分层：信任门禁、托管策略、hook 决策合并、权限规则复核</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/hooks.ts`、`source/claude-code-source/src/services/tools/toolHooks.ts`、`source/claude-code-source/src/utils/permissions/permissions.ts`、`source/claude-code-source/src/cli/structuredIO.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (shouldSkipHookDueToTrust()) return</span>
+<span class="code-line">if (shouldDisableAllHooksIncludingManaged()) return</span>
+<span class="code-line"></span>
+<span class="code-line">if (hookPermissionResult?.behavior === 'allow') {</span>
+<span class="code-line">  const ruleCheck = await checkRuleBasedPermissions(...)</span>
+<span class="code-line">  if (ruleCheck?.behavior === 'deny') return ruleCheck</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const winner = await Promise.race([hookPromise, sdkPromise])</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">交互模式下未建立 trust 时，hooks 不执行。</p>
+            <p class="tl">hook 返回 `allow` 后仍要走规则复核，deny/ask 规则仍可生效。</p>
+            <p class="tl">SDK 场景下 PermissionRequest hooks 与宿主权限弹窗并发竞速，先完成者生效。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>先过执行门禁</strong><p>managed-only、disable-all、trust 三层先决定 hooks 是否可运行。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>再做决策合并</strong><p>并行结果按优先级合并（`deny &gt; ask &gt; allow`），并可改写输入。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>最后权限落地</strong><p>工具执行前仍受规则系统约束，hook 不能绕过核心权限边界。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Stop 链路是分层编排：先 Stop，再 TaskCompleted，再 TeammateIdle</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/query/stopHooks.ts` 与 `source/claude-code-source/src/tools/TaskUpdateTool/TaskUpdateTool.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">for await (const result of executeStopHooks(...)) { ... }</span>
+<span class="code-line">if (preventedContinuation) return { preventContinuation: true }</span>
+<span class="code-line">if (blockingErrors.length &gt; 0) return { blockingErrors }</span>
+<span class="code-line"></span>
+<span class="code-line">if (isTeammate()) {</span>
+<span class="code-line">  // 1) 对自己名下 in_progress 任务执行 TaskCompleted hooks</span>
+<span class="code-line">  // 2) 执行 TeammateIdle hooks</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// TaskUpdateTool: status=completed 若被 TaskCompleted hook 阻断则更新失败</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">停止阶段是串联策略链，前一阶段可提前终止后续流程。</p>
+            <p class="tl">队友进入 idle 前，会先校验其在途任务是否允许完成。</p>
+            <p class="tl">任务完成阻断会直接影响任务状态写入结果，属于硬约束。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">🛑</div>
+        <div class="callout-content">
+          <strong class="callout-title">排障优先级</strong>
+          <p>出现“任务无法完成”时，先查 `TaskCompleted` hook 输出，再看 Stop/TeammateIdle 链路，避免误判为任务系统写入异常。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Agent hook 形态：受限工具集 + 结构化输出约束</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/hooks/execAgentHook.ts` 与 `source/claude-code-source/src/utils/hooks/hookHelpers.ts`</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">const structuredOutputTool = createStructuredOutputTool()</span>
+<span class="code-line">registerStructuredOutputEnforcement(setAppState, hookAgentId)</span>
+<span class="code-line"></span>
+<span class="code-line">const tools = filteredTools</span>
+<span class="code-line">  .filter(tool =&gt; !ALL_AGENT_DISALLOWED_TOOLS.has(tool.name))</span>
+<span class="code-line">  .concat(structuredOutputTool)</span>
+<span class="code-line"></span>
+<span class="code-line">if (!structuredOutputResult.ok) return { outcome: 'blocking', ... }</span>
+<span class="code-line">if (turnCount &gt;= 50) return { outcome: 'cancelled' }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">Agent hook 是多轮校验器，目标是输出结构化 verdict。</p>
+            <p class="tl">工具集有显式裁剪，避免 stop hook agent 触发递归式代理行为。</p>
+            <p class="tl">超过回合上限会取消，防止长尾占用。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module13-zh">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。hook 的 allow 不会跳过规则复核，deny/ask 规则仍可覆盖。 " data-explanation-wrong="`resolveHookPermissionDecision()` 在 hook allow 后仍调用规则检查。">
+          <h3 class="quiz-question">PreToolUse hook 返回 `allow` 后，下一步是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>直接执行工具，不再检查规则</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>仍执行规则检查，规则可继续要求询问或拒绝</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>自动转成 `passthrough` 并忽略 hook 输入改写</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。exit code 2 是阻断信号，其他非零返回码是非阻断错误。 " data-explanation-wrong="`executeHooks()` 对返回码做了明确分流：2=blocking，其他非零=non_blocking_error。">
+          <h3 class="quiz-question">哪种结果会被系统当作“阻断性策略决策”？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>任意非零退出码</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>仅 JSON 校验错误</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>exit code 2（或等价显式 block 决策）</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="正确。stop 链路先跑 Stop，再跑队友的 TaskCompleted，最后 TeammateIdle。 " data-explanation-wrong="`handleStopHooks()` 中队友链路顺序是 TaskCompleted 在前，TeammateIdle 在后。">
+          <h3 class="quiz-question">队友场景下 stop 阶段的 hook 顺序是什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先 Stop，再 TaskCompleted，再 TeammateIdle</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>先 TeammateIdle，再 Stop，再 TaskCompleted</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>只执行 Stop，队友相关 hooks 不参与</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module13-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module13-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

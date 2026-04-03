@@ -1,0 +1,236 @@
+<section class="module" id="module-14">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">14</span>
+      <h1 class="module-title">Headless、CI 与程序化运行</h1>
+      <p class="module-subtitle">`--print` 路径是一套可编排协议：输入输出格式、结构化结果、会话恢复与失败策略都由代码显式约束，适合自动化环境稳定执行。</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">自动化执行模型：四个可验证契约</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🖨️</div>
+          <h4 class="pattern-title">Headless 入口</h4>
+          <p class="pattern-desc">`-p/--print` 切换到非交互执行，主流程进入 `runHeadless(...)`。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">📡</div>
+          <h4 class="pattern-title">NDJSON 协议</h4>
+          <p class="pattern-desc">`--output-format=stream-json` 输出分帧消息，并携带 control request/response。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧱</div>
+          <h4 class="pattern-title">结构化输出</h4>
+          <p class="pattern-desc">`--json-schema` 注入 `StructuredOutput` 工具，带 schema 校验与重试上限。</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🔁</div>
+          <h4 class="pattern-title">会话连续性</h4>
+          <p class="pattern-desc">`--continue`/`--resume` 复用历史会话，支持 fork 与消息游标截断。</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">工程规则</strong>
+          <p>CI 中优先使用可解析输出和显式停止条件（`maxTurns`、预算、schema）。避免依赖终端交互行为。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">`--print` 是 headless 总开关，格式组合有强约束</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（968-991, 1235-1251, 1818-1858, 2584-2860）与 `source/claude-code-source/src/cli/print.ts`（787-793）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">option('-p, --print', 'Print response and exit ...')</span>
+<span class="code-line">addOption('--output-format', choices(['text','json','stream-json']))</span>
+<span class="code-line">addOption('--input-format', choices(['text','stream-json']))</span>
+<span class="code-line">...</span>
+<span class="code-line">if (inputFormat === 'stream-json' &amp;&amp; outputFormat !== 'stream-json') error</span>
+<span class="code-line">if (options.replayUserMessages &amp;&amp; (inputFormat !== 'stream-json' || outputFormat !== 'stream-json')) error</span>
+<span class="code-line">if (effectiveIncludePartialMessages &amp;&amp; (!isNonInteractiveSession || outputFormat !== 'stream-json')) error</span>
+<span class="code-line">if (options.sessionPersistence === false &amp;&amp; !isNonInteractiveSession) error</span>
+<span class="code-line">...</span>
+<span class="code-line">if (options.outputFormat === 'stream-json' &amp;&amp; !options.verbose) error</span>
+<span class="code-line">if (isNonInteractiveSession) void runHeadless(...)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`--print` 决定执行路径，启动后进入非交互循环。</p>
+            <p class="tl">`stream-json` 输入输出必须成对配置，格式不匹配直接失败退出。</p>
+            <p class="tl">若干参数只在 headless 场景有效，代码在启动阶段做了前置校验。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">stream-json 输出链路保证可解析与有序交付</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cli/print.ts`（587-596, 834-835, 5199-5233）与 `source/claude-code-source/src/cli/structuredIO.ts`（126-133, 160-167, 466-489）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// print.ts</span>
+<span class="code-line">const structuredIO = getStructuredIO(inputPrompt, options)</span>
+<span class="code-line">if (options.outputFormat === 'stream-json') installStreamJsonStdoutGuard()</span>
+<span class="code-line">registerProcessOutputErrorHandlers()</span>
+<span class="code-line"></span>
+<span class="code-line">// structuredIO.ts</span>
+<span class="code-line">readonly outbound = new Stream&lt;StdoutMessage&gt;() // 单写入队列</span>
+<span class="code-line">async write(message) { writeToStdout(ndjsonSafeStringify(message) + '\n') }</span>
+<span class="code-line">sendRequest(...) { this.outbound.enqueue({ type: 'control_request', ... }) }</span>
+<span class="code-line">if (request.subtype === 'can_use_tool') onControlRequestSent(message)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">stdout guard 在首次写入前安装，防止杂散输出破坏 NDJSON 分帧。</p>
+            <p class="tl">控制消息与事件消息共用有序队列，减少 request/event 乱序风险。</p>
+            <p class="tl">`StructuredIO` 与 `RemoteIO` 共用协议层，CLI 与 SDK 主机可复用同一消息模型。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">CI 风险点</strong>
+          <p>下游读取器按行解析 JSON。stdout 出现非 JSON 行会导致整条流水线解析失败。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">结构化输出链路：工具注入、schema 校验、重试封顶</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx`（1879-1901）、`source/claude-code-source/src/tools/SyntheticOutputTool/SyntheticOutputTool.ts`（20-26, 105-156）与 `source/claude-code-source/src/QueryEngine.ts`（327-333, 1004-1046）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// main.tsx</span>
+<span class="code-line">if (isSyntheticOutputToolEnabled({ isNonInteractiveSession }) &amp;&amp; options.jsonSchema) {</span>
+<span class="code-line">  const syntheticOutputResult = createSyntheticOutputTool(jsonSchema)</span>
+<span class="code-line">  tools = [...tools, syntheticOutputResult.tool]</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// SyntheticOutputTool.ts</span>
+<span class="code-line">export const SYNTHETIC_OUTPUT_TOOL_NAME = 'StructuredOutput'</span>
+<span class="code-line">const toolCache = new WeakMap&lt;object, CreateResult&gt;()</span>
+<span class="code-line">const validateSchema = ajv.compile(jsonSchema)</span>
+<span class="code-line">if (!isValid) throw new TelemetrySafeError(...)</span>
+<span class="code-line"></span>
+<span class="code-line">// QueryEngine.ts</span>
+<span class="code-line">if (callsThisQuery &gt;= maxRetries) yield { subtype: 'error_max_structured_output_retries', ... }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`--json-schema` 会在 headless 模式下追加内部工具 `StructuredOutput`。</p>
+            <p class="tl">schema 使用 Ajv 编译校验，基于对象引用做缓存，降低重复脚本调用开销。</p>
+            <p class="tl">连续输出不满足 schema 时会触发上限错误并结束回合，返回类型化结果。</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">API format</code>
+          <span class="badge-desc">`services/api/claude.ts` 会写入 `output_config.format` 并按模型能力加 beta header。</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Tool contract</code>
+          <span class="badge-desc">模型在最终阶段调用 `StructuredOutput`，输入必须符合 schema。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">`--continue` / `--resume` 行为边界清晰，支持 fork 与游标</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cli/print.ts`（567-577, 4907-5196）与 `source/claude-code-source/src/main.tsx`（1276-1301）</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (options.resumeSessionAt &amp;&amp; !options.resume) error</span>
+<span class="code-line">if (options.rewindFiles &amp;&amp; !options.resume) error</span>
+<span class="code-line"></span>
+<span class="code-line">if (options.continue) {</span>
+<span class="code-line">  const result = await loadConversationForResume(undefined, undefined)</span>
+<span class="code-line">  if (!options.forkSession) switchSession(result.sessionId)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if (options.resume) {</span>
+<span class="code-line">  const parsed = parseSessionIdentifier(options.resume)</span>
+<span class="code-line">  const result = await loadConversationForResume(parsed.sessionId, parsed.jsonlFile)</span>
+<span class="code-line">  if (options.resumeSessionAt) result.messages = result.messages.slice(0, index + 1)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if ((options.continue || options.resume) &amp;&amp; !options.forkSession &amp;&amp; sessionId) error</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">中文解读</span>
+          <div class="translation-lines">
+            <p class="tl">`--continue` 读取当前目录最近会话；`--resume` 读取显式会话标识（UUID/JSONL/URL）。</p>
+            <p class="tl">`--fork-session` 决定是否复用原 session ID，便于保留原轨迹并创建分支。</p>
+            <p class="tl">`--resume-session-at` 允许按 message UUID 截断历史，得到稳定可重放的分叉点。</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>确定恢复来源</strong><p>`--continue` 或 `--resume`。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>确定会话身份策略</strong><p>复用原 ID 或 `--fork-session` 新建分支 ID。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>确定回放游标</strong><p>需要时使用 `--resume-session-at` 截断历史。</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">CI 稳定运行模式：输出确定、失败显式、延迟可观测</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cli/print.ts`（594-624, 917-973, 4838-4866）、`source/claude-code-source/src/utils/headlessProfiler.ts`（62-71, 101-176）与 `source/claude-code-source/src/services/api/claude.ts`（1868-1928, 2337-2364）</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">A</div><div class="step-body"><strong>选输出协议</strong><p>单次解析用 `json`，增量消费用 `stream-json`。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">B</div><div class="step-body"><strong>设停止边界</strong><p>组合 `--max-turns`、`--max-budget-usd`、`--json-schema`。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">C</div><div class="step-body"><strong>让错误前置</strong><p>参数冲突、sandbox 不可用、无效恢复输入都在执行前失败。</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">D</div><div class="step-body"><strong>保留观测点</strong><p>headless profiler 与 stream watchdog 可定位慢启动、无事件流和卡流问题。</p></div></div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧪</div>
+        <div class="callout-content">
+          <strong class="callout-title">程序化 API 面</strong>
+          <p>`entrypoints/agentSdkTypes.ts` 暴露 `query(...)`、会话 create/resume、`getSessionMessages(...)`、`listSessions(...)` 等接口，适配宿主编排。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">快速自测</h2>
+      <div class="quiz-container animate-in" id="quiz-module14-zh">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="对。代码要求 input/output 都是 stream-json，格式不匹配直接退出。" data-explanation-wrong="stream-json 输入和输出必须配对，主流程会做前置校验。">
+          <h3 class="quiz-question">当 `--input-format=stream-json` 且输出设为非 `stream-json` 时，会发生什么？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>自动降级到 text 模式</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>切换到交互 REPL 模式</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>启动阶段报错并退出</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="对。QueryEngine 会按回合统计 StructuredOutput 调用次数，达到上限后返回 `error_max_structured_output_retries`。" data-explanation-wrong="schema 重试是有上限的，不会无限循环。">
+          <h3 class="quiz-question">结构化输出持续失败时，系统如何止损？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>统计 `StructuredOutput` 调用次数并在上限处返回错误结果</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>关闭 schema 校验，改为自由文本</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>跳过工具调用，直接成功退出</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="对。`--continue` 取最近会话，`--resume` 取显式标识；`--fork-session` 决定是否复用原会话 ID。" data-explanation-wrong="两者来源和会话 ID 策略不同，语义不可互换。">
+          <h3 class="quiz-question">关于 print 模式的恢复语义，哪项正确？</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`--continue` 与 `--resume` 都必须提供 UUID 参数</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`--continue` 走最近会话，`--resume` 解析显式会话标识</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`--resume-session-at` 可脱离 `--resume` 单独使用</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module14-zh')">检查答案</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module14-zh')">重新作答</button>
+      </div>
+    </div>
+  </div>
+</section>

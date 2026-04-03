@@ -1,0 +1,269 @@
+<section class="module" id="module-16">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">16</span>
+      <h1 class="module-title">Auto Mode Architecture</h1>
+      <p class="module-subtitle">Auto mode is classifier-mediated autonomy. Entry is gated, broad pre-approvals are stripped, cheap fast paths avoid wasted classifier calls, and failure paths fall back differently in interactive and headless runs.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Autonomy here is a guarded pipeline with four control surfaces</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🚪</div>
+          <h4 class="pattern-title">Entry Gate</h4>
+          <p class="pattern-desc">CLI intent, settings, model support, fast-mode breaker, and org circuit breakers decide whether auto mode can even be entered.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">✂️</div>
+          <h4 class="pattern-title">Rule Stripping</h4>
+          <p class="pattern-desc">Broad shell, PowerShell, and task allow-rules are removed before the classifier starts, so dangerous actions still reach the decision layer.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧮</div>
+          <h4 class="pattern-title">Decision Pipeline</h4>
+          <p class="pattern-desc">Cheap allow paths run first; only actions with real downside reach the transcript classifier.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">↩️</div>
+          <h4 class="pattern-title">Exit and Recovery</h4>
+          <p class="pattern-desc">When auto becomes unavailable, the runtime restores stripped rules, exits cleanly, and emits session-level notifications or attachments.</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">Design reading</strong>
+          <p>The public engineering writeup explains the security goal. The source code here shows the runtime mechanics that make that goal enforceable.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Entry into auto mode is conditional, not automatic</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/types/permissions.ts` (16-36), `source/claude-code-source/src/utils/permissions/permissionSetup.ts` (690-808, 1078-1128, 1355-1364), and `source/claude-code-source/src/main.tsx` (3817-3830)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const EXTERNAL_PERMISSION_MODES = [</span>
+<span class="code-line">  'acceptEdits', 'bypassPermissions', 'default', 'dontAsk', 'plan'</span>
+<span class="code-line">]</span>
+<span class="code-line">export const INTERNAL_PERMISSION_MODES = [ ...EXTERNAL_PERMISSION_MODES, 'auto' ]</span>
+<span class="code-line"></span>
+<span class="code-line">if (permissionModeCli) {</span>
+<span class="code-line">  const parsedMode = permissionModeFromString(permissionModeCli)</span>
+<span class="code-line">  if (parsedMode === 'auto' &amp;&amp; !autoModeCircuitBrokenSync) orderedModes.push('auto')</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const enabledState = parseAutoModeEnabledState(autoModeConfig?.enabled)</span>
+<span class="code-line">const modelSupported = modelSupportsAutoMode(mainModel) &amp;&amp; !disableFastModeBreakerFires</span>
+<span class="code-line">const canEnterAuto = enabledState !== 'disabled' &amp;&amp; !disabledBySettings &amp;&amp; modelSupported</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Auto mode is a real permission mode in the runtime type system, but it is not always available to the user.</p>
+            <p class="tl">Startup collects intent from CLI flags and settings, then re-checks circuit breakers and model capability before honoring that intent.</p>
+            <p class="tl">Availability in the mode picker and permission to enter auto are related, but not identical, decisions.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">Intent sources</code>
+          <span class="badge-desc">`--permission-mode auto`, `--enable-auto-mode`, or `permissions.defaultMode = auto`</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Gate inputs</code>
+          <span class="badge-desc">Org config, settings disable flag, supported model, and fast-mode breaker</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Broad allow-rules are stripped before the classifier can do its job</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissionSetup.ts` (268-341, 469-557, 582-634)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">function isDangerousClassifierPermission(toolName, ruleContent) {</span>
+<span class="code-line">  return isDangerousBashPermission(toolName, ruleContent)</span>
+<span class="code-line">    || isDangerousPowerShellPermission(toolName, ruleContent)</span>
+<span class="code-line">    || isDangerousTaskPermission(toolName, ruleContent)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">const dangerousPermissions = findDangerousClassifierPermissions(rules, [])</span>
+<span class="code-line">logForDebugging(`Ignoring dangerous permission ... (bypasses classifier)`)</span>
+<span class="code-line">return {</span>
+<span class="code-line">  ...removeDangerousPermissions(context, dangerousPermissions),</span>
+<span class="code-line">  strippedDangerousRules: stripped,</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Auto mode cannot trust the old “always allow” set, because some of those rules would prevent dangerous actions from ever reaching the classifier.</p>
+            <p class="tl">The runtime actively detects broad shell/interpreter/task rules and removes them from the live permission context when auto starts.</p>
+            <p class="tl">Those removed rules are stashed so the system can restore them cleanly when auto mode ends.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">Why this matters</strong>
+          <p>If `Bash(*)` or broad subagent rules stayed active, the most dangerous actions would silently bypass the very layer meant to review them.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">The runtime spends classifier calls only where they are needed</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissions.ts` (518-699)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (result.decisionReason?.type === 'safetyCheck' &amp;&amp; !result.decisionReason.classifierApprovable) {</span>
+<span class="code-line">  return result</span>
+<span class="code-line">}</span>
+<span class="code-line">if (tool.name === POWERSHELL_TOOL_NAME &amp;&amp; !feature('POWERSHELL_AUTO_MODE')) return result</span>
+<span class="code-line"></span>
+<span class="code-line">const acceptEditsResult = await tool.checkPermissions(parsedInput, { mode: 'acceptEdits' })</span>
+<span class="code-line">if (acceptEditsResult.behavior === 'allow') return { behavior: 'allow', decisionReason: { type: 'mode', mode: 'auto' } }</span>
+<span class="code-line"></span>
+<span class="code-line">if (classifierDecisionModule!.isAutoModeAllowlistedTool(tool.name)) return allow</span>
+<span class="code-line">classifierResult = await classifyYoloAction(...)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Some actions still require explicit human review, and those are held back before any classifier call.</p>
+            <p class="tl">Cheap fast paths then allow clearly safe actions: first “would this pass in acceptEdits?”, then the safe-tool allowlist.</p>
+            <p class="tl">Only the remaining actions pay classifier latency and token cost.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Hard guard</strong><p>Non-approvable safety checks and guarded tools stay outside auto approval.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Cheap allow</strong><p>`acceptEdits` simulation and allowlisted tools skip classifier cost.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Classifier path</strong><p>Everything else is formatted as an action and sent to `classifyYoloAction(...)`.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Failure handling is explicit and different in headless vs interactive runs</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/permissions/permissions.ts` (820-926)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (classifierResult.transcriptTooLong) {</span>
+<span class="code-line">  if (appState.toolPermissionContext.shouldAvoidPermissionPrompts) {</span>
+<span class="code-line">    throw new AbortError('Agent aborted: auto mode classifier transcript exceeded context window in headless mode')</span>
+<span class="code-line">  }</span>
+<span class="code-line">  return { ...result, decisionReason: { type: 'other', reason: '...manual approval' } }</span>
+<span class="code-line">}</span>
+<span class="code-line">if (classifierResult.unavailable) {</span>
+<span class="code-line">  if (getFeatureValue_CACHED_WITH_REFRESH('tengu_iron_gate_closed', true, ...)) return deny</span>
+<span class="code-line">  return result</span>
+<span class="code-line">}</span>
+<span class="code-line">const denialLimitResult = handleDenialLimitExceeded(...)</span>
+<span class="code-line">return { behavior: 'deny', decisionReason: { type: 'classifier', classifier: 'auto-mode', reason: classifierResult.reason } }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">When the classifier transcript gets too long, interactive sessions fall back toward human approval, but headless agents abort because no prompt path exists.</p>
+            <p class="tl">If the classifier is unavailable, the runtime can fail closed or fall back open depending on the gate configuration.</p>
+            <p class="tl">Repeated denials are tracked, and the system can escalate from repeated classifier blocks back into a human review flow.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">Transcript too long</code>
+          <span class="badge-desc">Manual fallback in interactive mode, abort path in headless mode</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Classifier unavailable</code>
+          <span class="badge-desc">Gate-controlled fail-closed deny or fail-open fallback</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Repeated denials</code>
+          <span class="badge-desc">Denial tracking can force escalation back toward explicit review</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Auto mode keeps state: attachments, plan-mode interaction, and operator tooling</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/bootstrap/state.ts` (132-160, 226-229, 1389-1397), `source/claude-code-source/src/utils/permissions/bypassPermissionsKillswitch.ts` (72-116), `source/claude-code-source/src/utils/permissions/permissionSetup.ts` (1206-1260, 1457-1486), and `source/claude-code-source/src/cli/handlers/autoMode.ts` (24-140)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// state.ts</span>
+<span class="code-line">if (toIsAuto &amp;&amp; !fromIsAuto) STATE.needsAutoModeExitAttachment = false</span>
+<span class="code-line">if (fromIsAuto &amp;&amp; !toIsAuto) STATE.needsAutoModeExitAttachment = true</span>
+<span class="code-line"></span>
+<span class="code-line">// permissionSetup.ts</span>
+<span class="code-line">return { ...restoreDangerousPermissions(ctx), prePlanMode: 'auto' }</span>
+<span class="code-line">if (planAutoMode &amp;&amp; currentMode !== 'bypassPermissions') {</span>
+<span class="code-line">  autoModeStateModule?.setAutoModeActive(true)</span>
+<span class="code-line">  return { ...stripDangerousPermissionsForAutoMode(context), prePlanMode: currentMode }</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// autoMode.ts / main.tsx</span>
+<span class="code-line">claude auto-mode defaults</span>
+<span class="code-line">claude auto-mode config</span>
+<span class="code-line">claude auto-mode critique</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Entering and leaving auto mode sets explicit session flags so the UI can communicate state changes exactly once.</p>
+            <p class="tl">Plan mode can preserve auto semantics, including stripped rules, when the user has opted in and the gate remains open.</p>
+            <p class="tl">Operators can inspect defaults, effective config, and even request an AI critique of custom rule sections from the CLI.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🔎</div>
+        <div class="callout-content">
+          <strong class="callout-title">Operator playbook</strong>
+          <p>Before relying on auto mode in a new environment, inspect defaults, dump effective config, then critique custom rules. This catches many bad local policies before runtime.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module16">
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Broad allow-rules are stripped so the classifier still sees dangerous shell and task actions." data-explanation-wrong="Keeping broad allow-rules would let the riskiest actions bypass the classifier entirely.">
+          <h3 class="quiz-question">Why does auto mode remove some existing allow-rules when it activates?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To reduce the number of tools visible to the model</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To stop dangerous actions from bypassing classifier review</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To make plan mode mandatory</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Yes. In headless mode there is no human prompt path, so transcript-too-long becomes an abort condition." data-explanation-wrong="Interactive mode can fall back to manual approval, but headless mode aborts when the classifier transcript exceeds the window.">
+          <h3 class="quiz-question">What happens when the classifier transcript exceeds the context window in a headless agent?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The runtime silently retries with a smaller model</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The runtime always falls back to a manual approval prompt</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The agent aborts because no interactive review path exists</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Correct. Auto availability depends on the gate/config state and model support, not only on user intent." data-explanation-wrong="Intent matters, but gate state and model support still control whether auto mode can actually be entered.">
+          <h3 class="quiz-question">Which combination best describes whether auto mode can be entered?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>User intent plus gate availability, settings state, and model support</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only the user’s `--permission-mode auto` flag</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only whether the current repo is trusted</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module16')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module16')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

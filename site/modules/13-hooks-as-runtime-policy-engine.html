@@ -1,0 +1,195 @@
+<section class="module" id="module-13">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">13</span>
+      <h1 class="module-title">Hooks as Runtime Policy Engine</h1>
+      <p class="module-subtitle">Hooks are not decorative callbacks. Claude Code treats them as a policy layer that can inspect tool calls, rewrite decisions, and block continuation across session, teammate, and task boundaries.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">The runtime exposes a full hook event surface</h2>
+      <p class="animate-in">Operationally, hooks cover startup, tool calls, compaction, teammate lifecycle, file/worktree changes, and config mutation. This gives operators a central control plane for audit and intervention.</p>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🧭</div>
+          <h4 class="pattern-title">Pre-Action Gates</h4>
+          <p class="pattern-desc">`PreToolUse`, `PermissionRequest`, and `Setup` can inject policy checks before side effects happen.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">🧾</div>
+          <h4 class="pattern-title">Post-Action Audit</h4>
+          <p class="pattern-desc">`PostToolUse`, `PostToolUseFailure`, and `ConfigChange` provide durable observability after execution.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧵</div>
+          <h4 class="pattern-title">Team Lifecycle</h4>
+          <p class="pattern-desc">`TaskCompleted`, `TeammateIdle`, `SubagentStart`, and `SubagentStop` enforce orchestration discipline for multi-agent runs.</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🔍</div>
+        <div class="callout-content">
+          <strong class="callout-title">Why this matters</strong>
+          <p>When incidents happen, hook traces let you explain exactly why an action was blocked, allowed, or rewritten.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Event schemas are typed, enumerated, and agent-aware</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/entrypoints/sdk/coreSchemas.ts` (lines 355-433)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export const HOOK_EVENTS = [</span>
+<span class="code-line">  'PreToolUse', 'PostToolUse', 'PermissionRequest',</span>
+<span class="code-line">  'TaskCompleted', 'ConfigChange', ...</span>
+<span class="code-line">] as const</span>
+<span class="code-line"></span>
+<span class="code-line">export const BaseHookInputSchema = z.object({</span>
+<span class="code-line">  session_id: z.string(),</span>
+<span class="code-line">  transcript_path: z.string(),</span>
+<span class="code-line">  cwd: z.string(),</span>
+<span class="code-line">  permission_mode: z.string().optional(),</span>
+<span class="code-line">  agent_id: z.string().optional(),</span>
+<span class="code-line">  agent_type: z.string().optional(),</span>
+<span class="code-line">})</span>
+<span class="code-line"></span>
+<span class="code-line">export const PermissionRequestHookInputSchema = BaseHookInputSchema().and(</span>
+<span class="code-line">  z.object({ hook_event_name: z.literal('PermissionRequest'), tool_name: z.string() })</span>
+<span class="code-line">)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Hook events are a finite enum, so integrations can validate event names early.</p>
+            <p class="tl">Every payload carries session and filesystem context, then adds event-specific fields.</p>
+            <p class="tl">`agent_id` and `agent_type` make it possible to separate main-thread and subagent policies.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Pre-tool and post-tool hooks share one execution core</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/hooks.ts` (lines 3394-3475)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function* executePreToolHooks(...) {</span>
+<span class="code-line">  if (!hasHookForEvent('PreToolUse', appState, sessionId)) return</span>
+<span class="code-line">  const hookInput = { ...createBaseHookInput(...), hook_event_name: 'PreToolUse', ... }</span>
+<span class="code-line">  yield* executeHooks({ hookInput, toolUseID, matchQuery: toolName, ... })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export async function* executePostToolHooks(...) {</span>
+<span class="code-line">  const hookInput = { ...createBaseHookInput(...), hook_event_name: 'PostToolUse', ... }</span>
+<span class="code-line">  yield* executeHooks({ hookInput, toolUseID, matchQuery: toolName, ... })</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">The runtime checks hook presence first to avoid extra work when no handlers are configured.</p>
+            <p class="tl">`executeHooks(...)` is the common engine for matching, timeout, streaming progress, and blocking results.</p>
+            <p class="tl">Pre and post phases differ in payload, while execution semantics remain consistent.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Permission and config hooks are policy choke points</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/utils/hooks.ts` (lines 4157-4238)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">export async function* executePermissionRequestHooks(...) {</span>
+<span class="code-line">  const hookInput = { hook_event_name: 'PermissionRequest', tool_name, tool_input, permission_suggestions }</span>
+<span class="code-line">  yield* executeHooks({ hookInput, toolUseID, matchQuery: toolName, ... })</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">export async function executeConfigChangeHooks(source, filePath, timeoutMs) {</span>
+<span class="code-line">  const hookInput = { hook_event_name: 'ConfigChange', source, file_path: filePath }</span>
+<span class="code-line">  const results = await executeHooksOutsideREPL({ hookInput, matchQuery: source, timeoutMs })</span>
+<span class="code-line">  if (source === 'policy_settings') return results.map(r =&gt; ({ ...r, blocked: false }))</span>
+<span class="code-line">  return results</span>
+<span class="code-line">}</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Permission hooks can pre-approve, deny, or annotate decisions before fallback prompt logic runs.</p>
+            <p class="tl">Config change hooks fire for auditing, including live watcher events during a session.</p>
+            <p class="tl">Enterprise policy settings are intentionally non-blockable, so audit and enforcement do not conflict.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Stop-time hooks extend into teammate and task workflows</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/query/stopHooks.ts` (lines 334-430) and `source/claude-code-source/src/utils/hooks/hookHelpers.ts` (lines 67-82)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (isTeammate()) {</span>
+<span class="code-line">  const inProgressTasks = tasks.filter(t =&gt; t.status === 'in_progress' &amp;&amp; t.owner === teammateName)</span>
+<span class="code-line">  for (const task of inProgressTasks) yield* executeTaskCompletedHooks(...)</span>
+<span class="code-line">  yield* executeTeammateIdleHooks(...)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">addFunctionHook(setAppState, sessionId, 'Stop', '',</span>
+<span class="code-line">  messages =&gt; hasSuccessfulToolCall(messages, SYNTHETIC_OUTPUT_TOOL_NAME),</span>
+<span class="code-line">  `You MUST call the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool ...`,</span>
+<span class="code-line">)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Stop logic continues beyond one assistant reply; it can evaluate teammate health and task completion before allowing continuation.</p>
+            <p class="tl">Function hooks can enforce output contracts, such as requiring structured completion payloads.</p>
+            <p class="tl">This is how policy and orchestration merge at the end of each turn.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Model proposes actions</strong><p>Tool calls and messages stream as usual.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Hook engine evaluates</strong><p>Event-matched hooks run with timeout, trust checks, and structured payloads.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Runtime commits outcome</strong><p>Allow, deny, continue-block, and audit events are attached to transcript flow.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module13">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Correct. Hook payloads include session and optional agent identity fields to separate main and subagent contexts." data-explanation-wrong="`BaseHookInputSchema` includes session metadata and optional `agent_id`/`agent_type` fields.">
+          <h3 class="quiz-question">Why does the base hook schema carry both `session_id` and optional `agent_id`?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only for prettier logging output</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only to support OAuth callbacks</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>To disambiguate main-thread and subagent policy scope</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Yes. Policy settings changes still emit hooks for audit, but block flags are neutralized." data-explanation-wrong="The runtime maps policy-setting hook results to `blocked: false` to avoid blocking enterprise-managed updates.">
+          <h3 class="quiz-question">What is special about `ConfigChange` hooks when `source === 'policy_settings'`?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>They can log events but cannot block the policy change</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>They are skipped entirely</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>They run only in print mode</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. Stop-time orchestration can trigger `TaskCompleted` and `TeammateIdle` hooks for teammate-owned workflows." data-explanation-wrong="In teammate context, stop flow can continue into task lifecycle and idle checks before final continuation.">
+          <h3 class="quiz-question">After stop hooks pass for a teammate, what does the runtime do next?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Immediately exits without extra checks</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Runs `TaskCompleted` and `TeammateIdle` hooks tied to teammate ownership</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Reloads MCP configs before returning control</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module13')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module13')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>

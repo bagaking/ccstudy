@@ -97,6 +97,7 @@
   const viewerFocusEl = $('#code-viewer-focus');
   const viewerCodeEl = $('#code-viewer-code');
   const viewerGithubLink = $('#code-viewer-github');
+  const nav = $('#nav');
   const heroDossier = $('#hero-dossier');
   const heroStartReading = $('#hero-start-reading');
   const heroOpenViewer = $('#hero-open-viewer');
@@ -113,6 +114,18 @@
     search: '',
   };
   let sourceIndexPromise = null;
+  let navOffsetFrame = 0;
+
+  function syncNavOffset() {
+    if (!nav) return;
+    if (navOffsetFrame) cancelAnimationFrame(navOffsetFrame);
+    navOffsetFrame = requestAnimationFrame(() => {
+      navOffsetFrame = 0;
+      const nextOffset = Math.max(nav.offsetHeight, Math.ceil(nav.getBoundingClientRect().height));
+      if (!nextOffset) return;
+      document.documentElement.style.setProperty('--nav-offset', `${nextOffset}px`);
+    });
+  }
 
   function escapeHtml(text) {
     return text
@@ -852,6 +865,12 @@
   initMode();
   initRail();
   buildChapterList();
+  syncNavOffset();
+  window.addEventListener('resize', syncNavOffset, { passive: true });
+  if (window.ResizeObserver && nav) {
+    const navResizeObserver = new ResizeObserver(() => syncNavOffset());
+    navResizeObserver.observe(nav);
+  }
   updateProgress();
   initHeroMetrics();
   initHeroActions();

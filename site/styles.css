@@ -85,6 +85,7 @@
   --content-width:      800px;
   --content-width-wide: 1000px;
   --nav-height:         50px;
+  --nav-offset:         var(--nav-height);
 
   /* RADII */
   --radius-sm:   8px;
@@ -115,6 +116,7 @@
 html {
   scroll-snap-type: y proximity;
   scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-offset) + var(--space-4));
 }
 
 body {
@@ -169,7 +171,7 @@ pre::-webkit-scrollbar { display: none; }
 .nav {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--nav-height);
+  min-height: var(--nav-height);
   z-index: 1000;
   background: rgba(249, 244, 236, 0.86);
   backdrop-filter: blur(8px);
@@ -189,10 +191,11 @@ pre::-webkit-scrollbar { display: none; }
   max-width: var(--content-width-wide);
   margin: 0 auto;
   padding: 0 var(--space-6);
-  height: 100%;
+  min-height: var(--nav-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-4);
 }
 
@@ -256,7 +259,8 @@ pre::-webkit-scrollbar { display: none; }
   min-height: 100vh;
   scroll-snap-align: start;
   padding: var(--space-16) var(--space-6);
-  padding-top: calc(var(--nav-height) + var(--space-12));
+  padding-top: calc(var(--nav-offset) + var(--space-12));
+  scroll-margin-top: calc(var(--nav-offset) + var(--space-4));
 }
 
 .module-content {
@@ -1363,12 +1367,13 @@ body {
 
 .hero-dossier {
   max-width: var(--content-width-wide);
-  margin: calc(var(--nav-height) + var(--space-6)) auto var(--space-12);
+  margin: calc(var(--nav-offset) + var(--space-6)) auto var(--space-12);
   padding: var(--space-8);
   border-radius: var(--radius-lg);
   background:
     linear-gradient(130deg, rgba(255,255,255,0.95), rgba(253,247,240,0.94));
   box-shadow: 0 26px 70px rgba(44, 42, 40, 0.12);
+  scroll-margin-top: calc(var(--nav-offset) + var(--space-4));
 }
 
 .hero-grid {
@@ -1479,10 +1484,10 @@ body {
 
 .chapter-rail {
   position: fixed;
-  top: calc(var(--nav-height) + var(--space-2));
+  top: calc(var(--nav-offset) + var(--space-2));
   right: var(--space-4);
   width: min(340px, calc(100vw - var(--space-8)));
-  max-height: calc(100vh - var(--nav-height) - var(--space-6));
+  max-height: calc(100vh - var(--nav-offset) - var(--space-6));
   overflow: auto;
   background: rgba(255,255,255,0.94);
   border-radius: var(--radius-lg);
@@ -1657,7 +1662,7 @@ body[data-mode="audit"] .module-number {
   }
 
   .hero-dossier {
-    margin-top: calc(var(--nav-height) + var(--space-4));
+    margin-top: calc(var(--nav-offset) + var(--space-4));
     padding: var(--space-5);
   }
 
@@ -2165,7 +2170,7 @@ body {
 }
 
 .module {
-  padding-top: calc(var(--nav-height) + var(--space-10));
+  padding-top: calc(var(--nav-offset) + var(--space-10));
 }
 
 .module-header {
@@ -2310,7 +2315,7 @@ body.nav-scrolled .nav {
   isolation: isolate;
   overflow: hidden;
   max-width: min(1160px, calc(100vw - var(--space-8)));
-  margin: calc(var(--nav-height) + var(--space-8)) auto var(--space-14);
+  margin: calc(var(--nav-offset) + var(--space-8)) auto calc(var(--space-14) + var(--space-6));
   padding: clamp(1.4rem, 2.3vw, 2.4rem);
   border: 0;
   border-radius: var(--shell-hero-radius);
@@ -2340,7 +2345,7 @@ body.nav-scrolled .nav {
 .hero-grid {
   grid-template-columns: minmax(0, 1.36fr) minmax(0, 0.94fr);
   gap: clamp(1rem, 2.3vw, 2rem);
-  align-items: stretch;
+  align-items: end;
 }
 
 .hero-copy {
@@ -2404,8 +2409,10 @@ body.nav-scrolled .nav {
 
 .hero-metrics {
   position: relative;
+  align-self: end;
   border-radius: calc(var(--shell-hero-radius) - 6px);
-  padding: var(--space-4);
+  margin-top: clamp(0.8rem, 2vw, 1.5rem);
+  padding: var(--space-5) var(--space-4) var(--space-4);
   background: linear-gradient(158deg, rgba(249, 240, 228, 0.78), rgba(255, 252, 247, 0.92));
   box-shadow: inset 0 0 0 1px rgba(165, 74, 42, 0.12);
 }
@@ -2464,7 +2471,11 @@ html[lang^="zh"] .hero-metrics::before {
   max-width: min(1160px, calc(100vw - var(--space-8)));
   min-height: 88vh;
   margin: 0 auto var(--space-12);
-  padding: calc(var(--nav-height) + var(--space-9)) clamp(1rem, 2.2vw, 2.2rem) var(--space-10);
+  padding: calc(var(--nav-offset) + var(--space-9)) clamp(1rem, 2.2vw, 2.2rem) var(--space-10);
+}
+
+.hero-dossier + .module {
+  margin-top: var(--space-8);
 }
 
 .module::before {
@@ -2479,7 +2490,7 @@ html[lang^="zh"] .hero-metrics::before {
 .module::after {
   content: 'Chapter ' attr(data-chapter);
   position: absolute;
-  top: calc(var(--nav-height) + var(--space-4));
+  top: calc(var(--nav-offset) + var(--space-4));
   right: clamp(1rem, 2vw, 1.6rem);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -2538,9 +2549,12 @@ body[data-mode="audit"] .screen {
 @media (max-width: 1024px) {
   .hero-grid {
     grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .hero-metrics {
+    align-self: stretch;
+    margin-top: var(--space-4);
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
@@ -2549,14 +2563,14 @@ body[data-mode="audit"] .screen {
   }
 
   .module::after {
-    top: calc(var(--nav-height) + var(--space-3));
+    top: calc(var(--nav-offset) + var(--space-3));
   }
 }
 
 @media (max-width: 760px) {
   .hero-dossier {
     max-width: calc(100vw - var(--space-4));
-    margin-top: calc(var(--nav-height) + var(--space-5));
+    margin-top: calc(var(--nav-offset) + var(--space-5));
     padding: var(--space-5);
   }
 
@@ -2579,6 +2593,7 @@ body[data-mode="audit"] .screen {
 
   .module {
     max-width: calc(100vw - var(--space-4));
+    margin-top: var(--space-4);
     padding-left: var(--space-3);
     padding-right: var(--space-3);
     min-height: auto;

@@ -1,0 +1,236 @@
+<section class="module" id="module-14">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">14</span>
+      <h1 class="module-title">Headless CI and Programmatic Operation</h1>
+      <p class="module-subtitle">Headless mode is a protocol surface, not a UI shortcut. `--print`, stream-json I/O, structured output tooling, and session resume semantics are designed to keep automated runs deterministic and recoverable.</p>
+    </header>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Execution map for automation: one runtime, four contracts</h2>
+      <div class="pattern-cards stagger-children">
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-1);">
+          <div class="pattern-icon" style="background: var(--color-actor-1);">🖨️</div>
+          <h4 class="pattern-title">Headless Entry</h4>
+          <p class="pattern-desc">`-p/--print` switches to non-interactive execution and routes into `runHeadless(...)`.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-2);">
+          <div class="pattern-icon" style="background: var(--color-actor-2);">📡</div>
+          <h4 class="pattern-title">NDJSON Protocol</h4>
+          <p class="pattern-desc">`--output-format=stream-json` uses framed stdout messages plus control request/response flow.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-3);">
+          <div class="pattern-icon" style="background: var(--color-actor-3);">🧱</div>
+          <h4 class="pattern-title">Schema Output</h4>
+          <p class="pattern-desc">`--json-schema` injects `StructuredOutput` tool validation and retry limits.</p>
+        </div>
+        <div class="pattern-card animate-in" style="border-top-color: var(--color-actor-4);">
+          <div class="pattern-icon" style="background: var(--color-actor-4);">🔁</div>
+          <h4 class="pattern-title">State Continuity</h4>
+          <p class="pattern-desc">`--continue`/`--resume` reuse transcript state with explicit forking and cursor controls.</p>
+        </div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧭</div>
+        <div class="callout-content">
+          <strong class="callout-title">Operational rule</strong>
+          <p>In CI, prefer machine-parseable outputs and explicit stop conditions (`maxTurns`, budget, schema). Do not rely on terminal-only affordances.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">`--print` is the headless mode gate, with strict format coupling</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (968-991, 1235-1251, 1818-1858, 2584-2860) and `source/claude-code-source/src/cli/print.ts` (787-793)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">option('-p, --print', 'Print response and exit ...')</span>
+<span class="code-line">addOption('--output-format', choices(['text','json','stream-json']))</span>
+<span class="code-line">addOption('--input-format', choices(['text','stream-json']))</span>
+<span class="code-line">...</span>
+<span class="code-line">if (inputFormat === 'stream-json' &amp;&amp; outputFormat !== 'stream-json') error</span>
+<span class="code-line">if (options.replayUserMessages &amp;&amp; (inputFormat !== 'stream-json' || outputFormat !== 'stream-json')) error</span>
+<span class="code-line">if (effectiveIncludePartialMessages &amp;&amp; (!isNonInteractiveSession || outputFormat !== 'stream-json')) error</span>
+<span class="code-line">if (options.sessionPersistence === false &amp;&amp; !isNonInteractiveSession) error</span>
+<span class="code-line">...</span>
+<span class="code-line">if (options.outputFormat === 'stream-json' &amp;&amp; !options.verbose) error</span>
+<span class="code-line">if (isNonInteractiveSession) void runHeadless(...)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Headless mode is explicit: `--print` is the switch that routes startup into the non-interactive runtime.</p>
+            <p class="tl">Stream input/output must be paired as `stream-json` on both sides; mixed modes are rejected early.</p>
+            <p class="tl">Several flags are guarded to avoid ambiguous automation behavior, including partial chunks and session persistence toggles.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Stream-json path keeps stdout parse-safe and control flow ordered</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cli/print.ts` (587-596, 834-835, 5199-5233) and `source/claude-code-source/src/cli/structuredIO.ts` (126-133, 160-167, 466-489)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// print.ts</span>
+<span class="code-line">const structuredIO = getStructuredIO(inputPrompt, options)</span>
+<span class="code-line">if (options.outputFormat === 'stream-json') installStreamJsonStdoutGuard()</span>
+<span class="code-line">registerProcessOutputErrorHandlers()</span>
+<span class="code-line"></span>
+<span class="code-line">// structuredIO.ts</span>
+<span class="code-line">readonly outbound = new Stream&lt;StdoutMessage&gt;() // single-writer ordering</span>
+<span class="code-line">async write(message) { writeToStdout(ndjsonSafeStringify(message) + '\n') }</span>
+<span class="code-line">sendRequest(...) { this.outbound.enqueue({ type: 'control_request', ... }) }</span>
+<span class="code-line">if (request.subtype === 'can_use_tool') onControlRequestSent(message)</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">A stdout guard is installed before first write so accidental console output does not corrupt NDJSON framing.</p>
+            <p class="tl">Structured protocol messages are serialized through one outbound queue, preventing request/event reordering.</p>
+            <p class="tl">The `RemoteIO`/`StructuredIO` abstraction keeps stdin and stdout behavior uniform for CLI and SDK hosts.</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout callout-warning animate-in">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-content">
+          <strong class="callout-title">CI parser risk</strong>
+          <p>When your downstream parser expects NDJSON, a single stray stdout line can break the run. The guard exists to prevent exactly that class of failure.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Structured output is a tool-injected contract with bounded retries</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/main.tsx` (1879-1901), `source/claude-code-source/src/tools/SyntheticOutputTool/SyntheticOutputTool.ts` (20-26, 105-156), and `source/claude-code-source/src/QueryEngine.ts` (327-333, 1004-1046)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">// main.tsx</span>
+<span class="code-line">if (isSyntheticOutputToolEnabled({ isNonInteractiveSession }) &amp;&amp; options.jsonSchema) {</span>
+<span class="code-line">  const syntheticOutputResult = createSyntheticOutputTool(jsonSchema)</span>
+<span class="code-line">  tools = [...tools, syntheticOutputResult.tool]</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">// SyntheticOutputTool.ts</span>
+<span class="code-line">export const SYNTHETIC_OUTPUT_TOOL_NAME = 'StructuredOutput'</span>
+<span class="code-line">const toolCache = new WeakMap&lt;object, CreateResult&gt;()</span>
+<span class="code-line">const validateSchema = ajv.compile(jsonSchema)</span>
+<span class="code-line">if (!isValid) throw new TelemetrySafeError(...)</span>
+<span class="code-line"></span>
+<span class="code-line">// QueryEngine.ts</span>
+<span class="code-line">if (callsThisQuery &gt;= maxRetries) yield { subtype: 'error_max_structured_output_retries', ... }</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">Schema mode is implemented as an internal tool, added only in non-interactive runs with `--json-schema`.</p>
+            <p class="tl">Input validation is Ajv-based, with schema-identity caching to reduce overhead across repeated scripted calls.</p>
+            <p class="tl">If the model keeps producing invalid tool payloads, the query loop exits with a typed structured-output retry error.</p>
+          </div>
+        </div>
+      </div>
+      <div class="badge-list animate-in">
+        <div class="badge-item">
+          <code class="badge-code">API format</code>
+          <span class="badge-desc">`services/api/claude.ts` sets `output_config.format` and adds structured-output beta header when supported.</span>
+        </div>
+        <div class="badge-item">
+          <code class="badge-code">Tool contract</code>
+          <span class="badge-desc">`StructuredOutput` must be called once at finalization; payload must match schema.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Resume and continue semantics are explicit, with cursor/fork controls</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cli/print.ts` (567-577, 4907-5196) and `source/claude-code-source/src/main.tsx` (1276-1301)</p>
+      <div class="translation-block animate-in">
+        <div class="translation-code">
+          <span class="translation-label">CODE</span>
+          <pre><code><span class="code-line">if (options.resumeSessionAt &amp;&amp; !options.resume) error</span>
+<span class="code-line">if (options.rewindFiles &amp;&amp; !options.resume) error</span>
+<span class="code-line"></span>
+<span class="code-line">if (options.continue) {</span>
+<span class="code-line">  const result = await loadConversationForResume(undefined, undefined)</span>
+<span class="code-line">  if (!options.forkSession) switchSession(result.sessionId)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if (options.resume) {</span>
+<span class="code-line">  const parsed = parseSessionIdentifier(options.resume)</span>
+<span class="code-line">  const result = await loadConversationForResume(parsed.sessionId, parsed.jsonlFile)</span>
+<span class="code-line">  if (options.resumeSessionAt) result.messages = result.messages.slice(0, index + 1)</span>
+<span class="code-line">}</span>
+<span class="code-line"></span>
+<span class="code-line">if ((options.continue || options.resume) &amp;&amp; !options.forkSession &amp;&amp; sessionId) error</span></code></pre>
+        </div>
+        <div class="translation-english">
+          <span class="translation-label">PLAIN ENGLISH</span>
+          <div class="translation-lines">
+            <p class="tl">`--continue` means “latest local conversation”; `--resume` means “specific session identifier (UUID/JSONL/URL path).”</p>
+            <p class="tl">`--fork-session` preserves history but assigns a new session identity, preventing accidental mutation of the original transcript line.</p>
+            <p class="tl">`--resume-session-at` truncates replay up to a specific message UUID, giving deterministic branch points for automation.</p>
+          </div>
+        </div>
+      </div>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Pick resume source</strong><p>Latest (`--continue`) or explicit (`--resume`).</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>Pick identity policy</strong><p>Reuse session ID or fork a new one.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>Pick replay cursor</strong><p>Optional `--resume-session-at` for partial-history continuation.</p></div></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">CI-safe patterns: deterministic output, explicit failure, measurable latency</h2>
+      <p class="animate-in" style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted);">`source/claude-code-source/src/cli/print.ts` (594-624, 917-973, 4838-4866), `source/claude-code-source/src/utils/headlessProfiler.ts` (62-71, 101-176), and `source/claude-code-source/src/services/api/claude.ts` (1868-1928, 2337-2364)</p>
+      <div class="step-cards stagger-children">
+        <div class="step-card animate-in"><div class="step-num">A</div><div class="step-body"><strong>Use typed outputs</strong><p>Prefer `--output-format json` for one-shot parsing or `stream-json` for event streams.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">B</div><div class="step-body"><strong>Bound runtime</strong><p>Set `--max-turns`, `--max-budget-usd`, and optionally `--json-schema` for strict termination modes.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">C</div><div class="step-body"><strong>Fail loudly</strong><p>Sandbox unavailability can hard-fail when required; invalid resume/format combos exit before running.</p></div></div>
+        <div class="step-card animate-in"><div class="step-num">D</div><div class="step-body"><strong>Instrument latency</strong><p>Headless profiler checkpoints + stream watchdog detect stalls and no-event stream failures.</p></div></div>
+      </div>
+      <div class="callout callout-info animate-in">
+        <div class="callout-icon">🧪</div>
+        <div class="callout-content">
+          <strong class="callout-title">Programmatic session APIs</strong>
+          <p>`entrypoints/agentSdkTypes.ts` exposes `query(...)`, session create/resume, `getSessionMessages(...)`, and `listSessions(...)` surfaces for host-driven orchestration.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <h2 class="screen-heading animate-in">Quick Check</h2>
+      <div class="quiz-container animate-in" id="quiz-module14">
+        <div class="quiz-question-block" data-correct="c" data-explanation-right="Correct. The runtime validates this pairing and exits early on mismatch." data-explanation-wrong="`stream-json` input is only valid when output is also `stream-json`, so protocol framing stays consistent.">
+          <h3 class="quiz-question">What happens if `--input-format=stream-json` is set but `--output-format` is not `stream-json`?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The runtime silently downgrades to text mode</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The runtime switches to interactive REPL mode</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The runtime exits with a format validation error</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="a" data-explanation-right="Exactly. It tracks StructuredOutput calls and emits `error_max_structured_output_retries` once the retry cap is hit." data-explanation-wrong="Retry behavior is bounded in QueryEngine; it does not retry forever when schema output keeps failing.">
+          <h3 class="quiz-question">How does headless mode stop infinite structured-output retries?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It counts `StructuredOutput` calls per query and exits on `MAX_STRUCTURED_OUTPUT_RETRIES`</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It disables schema validation after three failures</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It rewrites invalid output into free-form text</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <div class="quiz-question-block" data-correct="b" data-explanation-right="Correct. `--continue` targets latest local conversation, while `--resume` targets an explicit session identifier; `--fork-session` controls ID reuse." data-explanation-wrong="The two flags are not aliases; they differ in source selection and identity behavior.">
+          <h3 class="quiz-question">Which statement matches resume semantics in print mode?</h3>
+          <div class="quiz-options">
+            <button class="quiz-option" data-value="a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`--continue` and `--resume` both require an explicit UUID argument</span></button>
+            <button class="quiz-option" data-value="b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`--continue` loads the latest session; `--resume` parses an explicit session identifier</span></button>
+            <button class="quiz-option" data-value="c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>`--resume-session-at` can be used without `--resume`</span></button>
+          </div><div class="quiz-feedback"></div>
+        </div>
+        <button class="quiz-check-btn" onclick="checkQuiz('quiz-module14')">Check Answers</button>
+        <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module14')">Try Again</button>
+      </div>
+    </div>
+  </div>
+</section>
