@@ -36,6 +36,33 @@
     moduleFallback: '未命名模块',
     navDotAria: (index, title) => `模块 ${index}：${title}`,
     metricNA: '-',
+    metricPartsLabel: '分卷',
+    parts: [
+      {
+        id: 'part-1',
+        kicker: 'Part I',
+        title: '运行时主干',
+        summary: '从入口、循环、工具到权限与排障，建立完整执行主干。',
+        from: 1,
+        to: 6,
+      },
+      {
+        id: 'part-2',
+        kicker: 'Part II',
+        title: '上下文与知识表面',
+        summary: '解释上下文工程、扩展能力、成本控制与记忆设计的连接关系。',
+        from: 7,
+        to: 10,
+      },
+      {
+        id: 'part-3',
+        kicker: 'Part III',
+        title: '协同与自治系统',
+        summary: '覆盖多代理协作、后台执行、hooks、headless、MCP 与自动模式。',
+        from: 11,
+        to: 16,
+      },
+    ],
     viewerIdle: '点击页面中的文件引用即可加载源码。',
     viewerLoading: '正在加载源码...',
     viewerLoadFailed: '源码加载失败：',
@@ -63,6 +90,33 @@
     moduleFallback: 'Untitled module',
     navDotAria: (index, title) => `Module ${index}: ${title}`,
     metricNA: '-',
+    metricPartsLabel: 'Parts',
+    parts: [
+      {
+        id: 'part-1',
+        kicker: 'Part I',
+        title: 'Runtime Spine',
+        summary: 'Build the execution backbone from entry, loop, tools, permissions, and debugging.',
+        from: 1,
+        to: 6,
+      },
+      {
+        id: 'part-2',
+        kicker: 'Part II',
+        title: 'Context and Knowledge Surfaces',
+        summary: 'Explain how context engineering, extensions, cost controls, and memory design work together.',
+        from: 7,
+        to: 10,
+      },
+      {
+        id: 'part-3',
+        kicker: 'Part III',
+        title: 'Coordination and Autonomy',
+        summary: 'Cover multi-agent coordination, background execution, hooks, headless operation, MCP, and auto mode.',
+        from: 11,
+        to: 16,
+      },
+    ],
     viewerIdle: 'Select a file reference to load source.',
     viewerLoading: 'Loading source...',
     viewerLoadFailed: 'Failed to load source: ',
@@ -682,12 +736,94 @@
   const progressBar = $('#progress-bar');
   let navDots       = [];
   const modules     = $$('.module');
+  const partSections = I18N.parts
+    .map(part => {
+      const sectionModules = [];
+      for (let n = part.from; n <= part.to; n += 1) {
+        const mod = modules[n - 1];
+        if (mod) sectionModules.push(mod);
+      }
+      return { ...part, modules: sectionModules };
+    })
+    .filter(part => part.modules.length > 0);
+  const modulePartMap = new Map();
+  partSections.forEach((part, partIndex) => {
+    part.modules.forEach((mod, offset) => {
+      modulePartMap.set(mod, {
+        part,
+        partIndex,
+        isPartStart: offset === 0,
+      });
+    });
+  });
+
+  function injectPartIntro(mod, part) {
+    const moduleContent = $('.module-content', mod) || mod;
+    const header = $('.module-header', mod);
+    if (!moduleContent || !header) return;
+    let intro = $('.part-intro', mod);
+    if (!intro) {
+      intro = document.createElement('section');
+      intro.className = 'part-intro animate-in';
+    }
+    intro.innerHTML = `
+      <p class="part-intro-kicker">${escapeHtml(part.kicker)}</p>
+      <h2 class="part-intro-title">${escapeHtml(part.title)}</h2>
+      <p class="part-intro-summary">${escapeHtml(part.summary)}</p>
+    `;
+    if (intro.parentElement !== moduleContent || intro.nextElementSibling !== header) {
+      moduleContent.insertBefore(intro, header);
+    }
+  }
+
+  function mountHeroPartStrip() {
+    if (!heroDossier || partSections.length === 0) return;
+    const heroTags = $('.hero-tags', heroDossier);
+    if (!heroTags || !heroTags.parentElement) return;
+    let strip = $('.hero-part-strip', heroTags.parentElement);
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.className = 'hero-part-strip';
+      heroTags.insertAdjacentElement('afterend', strip);
+    }
+    strip.innerHTML = '';
+    partSections.forEach(part => {
+      const firstModule = part.modules[0];
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'hero-part-item';
+      item.innerHTML = `
+        <span class="hero-part-kicker">${escapeHtml(part.kicker)}</span>
+        <span class="hero-part-name">${escapeHtml(part.title)}</span>
+      `;
+      if (firstModule) {
+        item.dataset.target = firstModule.id || '';
+        item.addEventListener('click', () => {
+          firstModule.scrollIntoView({ behavior: 'smooth' });
+          toggleRail(false);
+        });
+      }
+      strip.appendChild(item);
+    });
+  }
 
   function decorateModules() {
     const themes = ['ember', 'sand', 'copper', 'clay'];
     modules.forEach((mod, i) => {
       mod.dataset.chapter = String(i + 1).padStart(2, '0');
       mod.dataset.theme = themes[i % themes.length];
+      const partInfo = modulePartMap.get(mod);
+      if (!partInfo) return;
+      mod.dataset.part = partInfo.part.id;
+      mod.dataset.partIndex = String(partInfo.partIndex + 1);
+      if (partInfo.isPartStart) {
+        mod.dataset.partStart = 'true';
+        injectPartIntro(mod, partInfo.part);
+      } else {
+        delete mod.dataset.partStart;
+        const staleIntro = $('.part-intro', mod);
+        if (staleIntro) staleIntro.remove();
+      }
     });
   }
 
@@ -711,6 +847,7 @@
       dot.dataset.tooltip = title;
       dot.setAttribute('role', 'tab');
       dot.setAttribute('aria-label', I18N.navDotAria(i + 1, title));
+      if (mod.dataset.partStart === 'true') dot.classList.add('part-start');
       dot.addEventListener('click', () => {
         mod.scrollIntoView({ behavior: 'smooth' });
         toggleRail(false);
@@ -770,23 +907,41 @@
   function buildChapterList() {
     if (!chapterList) return;
     chapterList.innerHTML = '';
-    modules.forEach((mod, i) => {
-      const id = mod.id;
-      if (!id) return;
-      const title = $('.module-title', mod)?.textContent?.trim() || I18N.moduleFallback;
-      const li = document.createElement('li');
-      const a = document.createElement('a');
-      a.href = `#${id}`;
-      a.dataset.target = id;
-      a.innerHTML = `<span class="idx">${String(i + 1).padStart(2, '0')}</span><span class="title">${title}</span>`;
-      a.addEventListener('click', e => {
-        e.preventDefault();
-        const target = $('#' + id);
-        if (target) target.scrollIntoView({ behavior: 'smooth' });
-        toggleRail(false);
+    partSections.forEach(part => {
+      const partNode = document.createElement('li');
+      partNode.className = 'chapter-part';
+
+      const head = document.createElement('div');
+      head.className = 'chapter-part-head';
+      head.innerHTML = `
+        <span class="chapter-part-kicker">${escapeHtml(part.kicker)}</span>
+        <strong class="chapter-part-title">${escapeHtml(part.title)}</strong>
+        <p class="chapter-part-summary">${escapeHtml(part.summary)}</p>
+      `;
+      partNode.appendChild(head);
+
+      const partList = document.createElement('ol');
+      partList.className = 'chapter-part-list';
+      part.modules.forEach(mod => {
+        const id = mod.id;
+        if (!id) return;
+        const title = $('.module-title', mod)?.textContent?.trim() || I18N.moduleFallback;
+        const entry = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = `#${id}`;
+        a.dataset.target = id;
+        a.innerHTML = `<span class="idx">${mod.dataset.chapter || '--'}</span><span class="title">${title}</span>`;
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          const target = $('#' + id);
+          if (target) target.scrollIntoView({ behavior: 'smooth' });
+          toggleRail(false);
+        });
+        entry.appendChild(a);
+        partList.appendChild(entry);
       });
-      li.appendChild(a);
-      chapterList.appendChild(li);
+      partNode.appendChild(partList);
+      chapterList.appendChild(partNode);
     });
   }
 
@@ -806,7 +961,9 @@
     const moduleCount = modules.length;
     const quizCount = $$('.quiz-container').length;
     const snippetCount = $$('.translation-block').length;
-    const termCount = $$('.term').length;
+    const partCount = partSections.length;
+    const metricLabelEl = mTerms.closest('.metric-card')?.querySelector('.metric-label');
+    if (metricLabelEl) metricLabelEl.textContent = I18N.metricPartsLabel;
 
     function renderMetric(el, value) {
       if (!el) return;
@@ -833,7 +990,7 @@
     renderMetric(mModules, moduleCount);
     renderMetric(mQuizzes, quizCount);
     renderMetric(mSnippets, snippetCount);
-    renderMetric(mTerms, termCount);
+    renderMetric(mTerms, partCount);
   }
 
   function initHeroActions() {
@@ -865,6 +1022,7 @@
   initMode();
   initRail();
   buildChapterList();
+  mountHeroPartStrip();
   syncNavOffset();
   window.addEventListener('resize', syncNavOffset, { passive: true });
   if (window.ResizeObserver && nav) {
