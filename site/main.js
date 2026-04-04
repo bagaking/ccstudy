@@ -818,7 +818,12 @@
       mod.dataset.partIndex = String(partInfo.partIndex + 1);
       if (partInfo.isPartStart) {
         mod.dataset.partStart = 'true';
-        injectPartIntro(mod, partInfo.part);
+        if (i !== 0) {
+          injectPartIntro(mod, partInfo.part);
+        } else {
+          const staleIntro = $('.part-intro', mod);
+          if (staleIntro) staleIntro.remove();
+        }
       } else {
         delete mod.dataset.partStart;
         const staleIntro = $('.part-intro', mod);
