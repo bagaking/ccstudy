@@ -2502,8 +2502,12 @@ body.nav-scrolled .nav {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  width: min(1160px, calc(100vw - var(--space-8)));
   max-width: min(1160px, calc(100vw - var(--space-8)));
-  margin: calc(var(--nav-offset) + var(--space-8)) auto calc(var(--space-14) + var(--space-6));
+  margin-top: calc(var(--nav-offset) + var(--space-8));
+  margin-right: auto;
+  margin-bottom: calc(var(--space-14) + var(--space-6));
+  margin-left: auto;
   padding: clamp(1.4rem, 2.3vw, 2.4rem);
   border: 0;
   border-radius: var(--shell-hero-radius);
@@ -2662,7 +2666,7 @@ html[lang^="zh"] .hero-metrics::before {
   padding: calc(var(--nav-offset) + var(--space-9)) clamp(1rem, 2.2vw, 2.2rem) var(--space-10);
 }
 
-.hero-dossier + .module {
+.code-viewer-shell + .module {
   margin-top: var(--space-8);
 }
 
@@ -2765,8 +2769,11 @@ body[data-mode="audit"] .screen {
 
 @media (max-width: 760px) {
   .hero-dossier {
+    width: calc(100vw - var(--space-4));
     max-width: calc(100vw - var(--space-4));
     margin-top: calc(var(--nav-offset) + var(--space-5));
+    margin-right: auto;
+    margin-left: auto;
     padding: var(--space-5);
   }
 
