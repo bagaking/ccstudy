@@ -418,27 +418,75 @@
     }
   }
 
-  function highlightCode(line) {
-    let comment = '';
-    let code = line;
-    const commentIdx = line.indexOf('//');
-    if (commentIdx >= 0) {
-      code = line.slice(0, commentIdx);
-      comment = line.slice(commentIdx);
+  function alphaIndex(index) {
+    let n = Number(index) + 1;
+    let out = '';
+    while (n > 0) {
+      n -= 1;
+      out = String.fromCharCode(65 + (n % 26)) + out;
+      n = Math.floor(n / 26);
+    }
+    return out || 'A';
+  }
+
+  function splitLineComment(line) {
+    let quote = '';
+    let escaped = false;
+
+    for (let i = 0; i < line.length - 1; i += 1) {
+      const ch = line[i];
+      const next = line[i + 1];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (quote) {
+        if (ch === quote) quote = '';
+        continue;
+      }
+
+      if (ch === '"' || ch === '\'' || ch === '`') {
+        quote = ch;
+        continue;
+      }
+
+      if (ch === '/' && next === '/') {
+        return {
+          code: line.slice(0, i),
+          comment: line.slice(i),
+        };
+      }
     }
 
+    return { code: line, comment: '' };
+  }
+
+  function highlightCode(line) {
+    const { code, comment } = splitLineComment(line);
+
     const stringStore = [];
-    let html = escapeHtml(code).replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, (m) => {
-      const key = `__STR_${stringStore.length}__`;
-      stringStore.push(`<span class="code-string">${m}</span>`);
+    let working = code.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, (m) => {
+      const key = `__STR_${alphaIndex(stringStore.length)}__`;
+      stringStore.push(`<span class="code-string">${escapeHtml(m)}</span>`);
       return key;
     });
+    let html = escapeHtml(working);
 
     html = html.replace(/\b(import|export|from|const|let|var|if|else|return|await|async|for|of|function|class|new|try|catch|throw|extends|type|interface)\b/g, '<span class="code-keyword">$1</span>');
     html = html.replace(/([A-Za-z_$][\w$]*)(?=\()/g, '<span class="code-function">$1</span>');
     html = html.replace(/([A-Za-z_$][\w$]*)(?=\s*:)/g, '<span class="code-property">$1</span>');
     html = html.replace(/\b(\d+(?:_\d+)*(?:\.\d+)?)\b/g, '<span class="code-number">$1</span>');
-    html = html.replace(/__STR_(\d+)__/g, (_m, idx) => stringStore[Number(idx)] || '');
+    html = html.replace(/__STR_([A-Z]+)__/g, (_m, key) => {
+      const index = [...key].reduce((acc, ch) => acc * 26 + (ch.charCodeAt(0) - 64), 0) - 1;
+      return stringStore[index] || '';
+    });
 
     if (comment) {
       html += `<span class="code-comment">${escapeHtml(comment)}</span>`;
