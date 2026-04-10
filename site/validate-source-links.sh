@@ -28,8 +28,13 @@ import json
 import sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    for path in json.load(fh):
-        print(path)
+    paths = json.load(fh)
+if not isinstance(paths, list):
+    raise SystemExit(f"{sys.argv[1]} must contain a JSON array")
+for path in paths:
+    if not isinstance(path, str):
+        raise SystemExit(f"{sys.argv[1]} entries must be strings")
+    print(path)
 PY
 
 if ! cmp -s "${FILES_LIST}" "${INDEX_LIST}"; then
