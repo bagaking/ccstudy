@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SITE_DIR}"
+
 bash build.sh
 
 if [ -f "zh/_base.html" ] && [ -f "zh/_footer.html" ] && [ -d "zh/modules" ] && ls zh/modules/*.html >/dev/null 2>&1; then
@@ -11,4 +14,3 @@ else
 fi
 
 echo "Build complete."
-

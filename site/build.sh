@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SITE_DIR}"
+
 if [ ! -f "_base.html" ] || [ ! -f "_footer.html" ]; then
   echo "Missing _base.html or _footer.html in site/."
   exit 1
