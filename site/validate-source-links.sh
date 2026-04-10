@@ -22,7 +22,15 @@ REFS_LIST="$(mktemp)"
 trap 'rm -f "${FILES_LIST}" "${INDEX_LIST}" "${REFS_LIST}"' EXIT
 
 find "${SOURCE_ROOT}" -type f | LC_ALL=C sort > "${FILES_LIST}"
-sed -n 's/^  "\([^"]*\)",\{0,1\}$/\1/p' "${INDEX_FILE}" | LC_ALL=C sort > "${INDEX_LIST}"
+python3 -m json.tool "${INDEX_FILE}" >/dev/null
+python3 - "${INDEX_FILE}" <<'PY' | LC_ALL=C sort > "${INDEX_LIST}"
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    for path in json.load(fh):
+        print(path)
+PY
 
 if ! cmp -s "${FILES_LIST}" "${INDEX_LIST}"; then
   echo "${INDEX_FILE} is out of sync with ${SOURCE_ROOT}"
@@ -42,9 +50,47 @@ HTML_FILES=(
 {
   for file in "${HTML_FILES[@]}"; do
     [ -f "${file}" ] || continue
-    grep -Eho 'source/claude-code-source/[A-Za-z0-9_@./+-]+' "${file}" || true
+    python3 - "${file}" <<'PY'
+import html
+import re
+import sys
+
+SOURCE_REF_RE = re.compile(
+    r"(?:`([^`]+)`|data-open-file=[\"']([^\"']+)[\"']|source/claude-code-source/[A-Za-z0-9_@./+-]+)"
+)
+
+
+def normalize(raw_path):
+    if not raw_path:
+        return None
+    trailing_punctuation = r"[),.;:]+$"
+    path = html.unescape(str(raw_path).strip())
+    path = re.sub(r"^`|`$", "", path)
+    if path.startswith("./"):
+        path = path[2:]
+    path = path.lstrip("/")
+    path = re.sub(trailing_punctuation, "", path)
+
+    if path.startswith("source/"):
+        return path
+    if path.startswith("claude-code-source/"):
+        return f"source/{path}"
+    if path.startswith(("src/", "vendor/", "stubs/")):
+        return f"source/claude-code-source/{path}"
+    return None
+
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    text = fh.read()
+
+for match in SOURCE_REF_RE.finditer(text):
+    raw = next((group for group in match.groups() if group), match.group(0))
+    path = normalize(raw)
+    if path:
+        print(path)
+PY
   done
-} | sed 's/[),.;:]*$//' | LC_ALL=C sort -u > "${REFS_LIST}"
+} | LC_ALL=C sort -u > "${REFS_LIST}"
 
 missing=0
 while IFS= read -r path; do
