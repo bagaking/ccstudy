@@ -13,4 +13,6 @@ else
   echo "Skip zh build: zh shell or modules not ready yet."
 fi
 
+bash validate-source-links.sh
+
 echo "Build complete."
