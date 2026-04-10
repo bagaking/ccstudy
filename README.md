@@ -26,7 +26,7 @@ ccstudy/
 ### 2. 安装依赖
 
 ```bash
-cd ~/proj/priv/bagaking/ccstudy/source/claude-code-source
+cd source/claude-code-source
 pnpm install --registry https://registry.npmjs.org
 ```
 
@@ -58,7 +58,7 @@ bun dist/cli.js
 学习站点只是次要产物，位于 `site/`：
 
 ```bash
-cd ~/proj/priv/bagaking/ccstudy/site
+cd site
 bash build-all.sh
 ```
 
