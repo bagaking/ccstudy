@@ -76,6 +76,8 @@ def normalize(page_path, raw_url):
     parsed = urlparse(raw_url.strip())
     if parsed.scheme or parsed.netloc or raw_url.startswith(("#", "mailto:", "tel:", "javascript:")):
         return None
+    if raw_url.startswith("/"):
+        return f"OUT_OF_BOUNDS:{raw_url}"
 
     page_dir = str(PurePosixPath(page_path).parent)
     if page_dir == ".":
@@ -86,7 +88,7 @@ def normalize(page_path, raw_url):
     normalized = str(PurePosixPath(path))
 
     if normalized == "." or normalized.startswith("../"):
-        return None
+        return f"OUT_OF_BOUNDS:{raw_url}"
     return normalized
 
 
@@ -107,7 +109,12 @@ missing_assets=0
 while IFS="$(printf '\t')" read -r page path; do
   [ -n "${path}" ] || continue
   if [ ! -e "${path}" ]; then
-    echo "Missing site asset reference: ${path} (from ${page})"
+    if [[ "${path}" == OUT_OF_BOUNDS:* ]]; then
+      ref="${path#OUT_OF_BOUNDS:}"
+      echo "Out-of-bounds site asset reference: ${ref} (from ${page})"
+    else
+      echo "Missing site asset reference: ${path} (from ${page})"
+    fi
     missing_assets=1
   fi
 done < "${ASSET_REFS_LIST}"
@@ -130,9 +137,11 @@ HTML_FILES=(
     [ -f "${file}" ] || continue
     python3 - "${file}" <<'PY'
 import html
+import posixpath
 import re
 import sys
 
+SOURCE_ROOT = "source/claude-code-source"
 SOURCE_REF_RE = re.compile(
     r"(?:`([^`]+)`|data-open-file=[\"']([^\"']+)[\"']|source/claude-code-source/[A-Za-z0-9_@./+-]+)"
 )
@@ -149,12 +158,18 @@ def normalize(raw_path):
     path = path.lstrip("/")
     path = re.sub(trailing_punctuation, "", path)
 
+    def checked_source_path(candidate):
+        normalized = posixpath.normpath(candidate)
+        if normalized == SOURCE_ROOT or normalized.startswith(f"{SOURCE_ROOT}/"):
+            return normalized
+        return f"OUT_OF_BOUNDS:{raw_path}"
+
     if path.startswith("source/"):
-        return path
+        return checked_source_path(path)
     if path.startswith("claude-code-source/"):
-        return f"source/{path}"
+        return checked_source_path(f"source/{path}")
     if path.startswith(("src/", "vendor/", "stubs/")):
-        return f"source/claude-code-source/{path}"
+        return checked_source_path(f"{SOURCE_ROOT}/{path}")
     return None
 
 
@@ -174,7 +189,12 @@ missing=0
 while IFS= read -r path; do
   [ -n "${path}" ] || continue
   if [ ! -e "${path}" ]; then
-    echo "Missing source reference: ${path}"
+    if [[ "${path}" == OUT_OF_BOUNDS:* ]]; then
+      ref="${path#OUT_OF_BOUNDS:}"
+      echo "Out-of-bounds source reference: ${ref}"
+    else
+      echo "Missing source reference: ${path}"
+    fi
     missing=1
   fi
 done < "${REFS_LIST}"
