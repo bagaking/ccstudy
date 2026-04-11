@@ -56,6 +56,7 @@ SITE_PAGES=(
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from urllib.parse import urlparse, unquote
+import posixpath
 import sys
 
 
@@ -82,8 +83,11 @@ def normalize(page_path, raw_url):
     page_dir = str(PurePosixPath(page_path).parent)
     if page_dir == ".":
         page_dir = ""
-    joined = PurePosixPath(page_dir) / unquote(parsed.path)
-    normalized = str(PurePosixPath(joined))
+    decoded_path = unquote(parsed.path)
+    if not decoded_path:
+        return None
+    joined = posixpath.join(page_dir, decoded_path) if page_dir else decoded_path
+    normalized = posixpath.normpath(joined)
 
     if normalized == ".." or normalized.startswith("../"):
         return f"OUT_OF_BOUNDS:{raw_url}"
