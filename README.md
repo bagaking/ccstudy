@@ -82,6 +82,19 @@ bash build-all.sh
 viewer，在 GitHub Pages 上也能工作。这个同步副本属于学习站点资产，不是单独
 发布的上游产品包。
 
+## 仓库验证
+
+Use the root validation entrypoint before changing the learning site or source
+snapshot references:
+
+```bash
+sh ./validate.sh
+```
+
+It builds the bilingual static site through `site/build-all.sh`, validates
+source and asset references, and runs Git whitespace checks. It does not build
+or publish an upstream product release.
+
 ## 课程地址
 
 - English: https://bagaking.github.io/ccstudy/

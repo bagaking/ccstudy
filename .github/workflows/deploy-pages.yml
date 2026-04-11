@@ -31,10 +31,7 @@ jobs:
 
       - name: Build static site
         run: |
-          chmod +x site/build.sh site/build-all.sh site/validate-source-links.sh
-          cd site
-          bash build-all.sh
-          bash validate-source-links.sh
+          sh ./validate.sh
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
