@@ -14,7 +14,11 @@ fi
 
 mkdir -p "${SITE_DIR}/source"
 rm -rf "${DST_DIR}"
-cp -R "${SRC_DIR}" "${DST_DIR}"
+if command -v ditto >/dev/null 2>&1; then
+  ditto --clone --noextattr --norsrc "${SRC_DIR}" "${DST_DIR}"
+else
+  cp -R "${SRC_DIR}" "${DST_DIR}"
+fi
 
 {
   printf '[\n'

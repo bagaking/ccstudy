@@ -19,7 +19,8 @@ fi
 FILES_LIST="$(mktemp)"
 INDEX_LIST="$(mktemp)"
 REFS_LIST="$(mktemp)"
-trap 'rm -f "${FILES_LIST}" "${INDEX_LIST}" "${REFS_LIST}"' EXIT
+ASSET_REFS_LIST="$(mktemp)"
+trap 'rm -f "${FILES_LIST}" "${INDEX_LIST}" "${REFS_LIST}" "${ASSET_REFS_LIST}"' EXIT
 
 find "${SOURCE_ROOT}" -type f | LC_ALL=C sort > "${FILES_LIST}"
 python3 -m json.tool "${INDEX_FILE}" >/dev/null
@@ -40,6 +41,78 @@ PY
 if ! cmp -s "${FILES_LIST}" "${INDEX_LIST}"; then
   echo "${INDEX_FILE} is out of sync with ${SOURCE_ROOT}"
   diff -u "${FILES_LIST}" "${INDEX_LIST}" | sed -n '1,80p'
+  exit 1
+fi
+
+SITE_PAGES=(
+  "index.html"
+  "zh/index.html"
+)
+
+{
+  for file in "${SITE_PAGES[@]}"; do
+    [ -f "${file}" ] || continue
+    python3 - "${file}" <<'PY'
+from html.parser import HTMLParser
+from pathlib import PurePosixPath
+from urllib.parse import urljoin, urlparse, unquote
+import sys
+
+
+class AssetParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.refs = []
+
+    def handle_starttag(self, _tag, attrs):
+        attrs = dict(attrs)
+        for name in ("href", "src"):
+            value = attrs.get(name)
+            if value:
+                self.refs.append(value)
+
+
+def normalize(page_path, raw_url):
+    parsed = urlparse(raw_url.strip())
+    if parsed.scheme or parsed.netloc or raw_url.startswith(("#", "mailto:", "tel:", "javascript:")):
+        return None
+
+    page_dir = str(PurePosixPath(page_path).parent)
+    if page_dir == ".":
+        page_dir = ""
+    base = f"{page_dir}/" if page_dir else ""
+    joined = urljoin(base, parsed.path)
+    path = unquote(joined).lstrip("/")
+    normalized = str(PurePosixPath(path))
+
+    if normalized == "." or normalized.startswith("../"):
+        return None
+    return normalized
+
+
+page = sys.argv[1]
+with open(page, "r", encoding="utf-8") as fh:
+    parser = AssetParser()
+    parser.feed(fh.read())
+
+for ref in parser.refs:
+    path = normalize(page, ref)
+    if path:
+        print(f"{page}\t{path}")
+PY
+  done
+} | LC_ALL=C sort -u > "${ASSET_REFS_LIST}"
+
+missing_assets=0
+while IFS="$(printf '\t')" read -r page path; do
+  [ -n "${path}" ] || continue
+  if [ ! -e "${path}" ]; then
+    echo "Missing site asset reference: ${path} (from ${page})"
+    missing_assets=1
+  fi
+done < "${ASSET_REFS_LIST}"
+
+if [ "${missing_assets}" -ne 0 ]; then
   exit 1
 fi
 
@@ -111,5 +184,6 @@ if [ "${missing}" -ne 0 ]; then
 fi
 
 REF_COUNT="$(wc -l < "${REFS_LIST}" | tr -d ' ')"
+ASSET_REF_COUNT="$(wc -l < "${ASSET_REFS_LIST}" | tr -d ' ')"
 FILE_COUNT="$(wc -l < "${FILES_LIST}" | tr -d ' ')"
-echo "Validated ${REF_COUNT} source references and ${FILE_COUNT} indexed source files"
+echo "Validated ${REF_COUNT} source references, ${ASSET_REF_COUNT} site asset references, and ${FILE_COUNT} indexed source files"

@@ -16,6 +16,15 @@ English + Chinese:
 bash build-all.sh
 ```
 
+`build-all.sh` also validates source references, `source-index.json`, and local
+site asset links used by the generated pages.
+
+Narrow validation:
+
+```bash
+bash validate-source-links.sh
+```
+
 ## Output
 
 - `index.html`
